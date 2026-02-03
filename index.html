@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Competency Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Helper for safe storage (prevents crashes in private browsing or hospital networks)
+        const safeStorage = {
+            set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} },
+            get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
+            remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
+        };
+
+        // --- DATABASE CONFIGURATION ---
+        // THESE ARE LEFT EMPTY FOR SECURITY. 
+        // When you run this on GitHub, the "Setup" screen will ask you to paste your config.
+        let firebaseConfig = {
+            apiKey: "", 
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: "",
+            measurementId: ""
+        };
+
+        let appId = 'my-staff-tracker-v1';
+
+        // 1. Check for Environment Config (Canvas Internal)
+        if (typeof __firebase_config !== 'undefined') {
+            firebaseConfig = JSON.parse(__firebase_config);
+            appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
+        } 
+        // 2. Check for Saved Local Config (GitHub Hosting)
+        else {
+            const savedConfig = safeStorage.get('competency_firebase_config');
+            if (savedConfig) {
+                try {
+                    firebaseConfig = JSON.parse(savedConfig);
+                } catch(e) {
+                    safeStorage.remove('competency_firebase_config');
+                }
+            }
+        }
+
+        let auth, db;
+        
+        // Initialize if we have a valid configuration
+        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                onAuthStateChanged(auth, (user) => {
+                    window.state.user = user;
+                    if (user) setupRealtimeSync();
+                });
+
+                initAuth();
+            } catch (err) {
+                console.error("Firebase Init Error:", err);
+                safeStorage.remove('competency_firebase_config');
+                showSetupScreen();
+            }
+        } else {
+            showSetupScreen();
+        }
+
+        function showSetupScreen() {
+            window.addEventListener('DOMContentLoaded', () => {
+                const loginOverlay = document.getElementById('loginOverlay');
+                const setupScreen = document.getElementById('setupScreen');
+                if (loginOverlay) loginOverlay.classList.add('hidden');
+                if (setupScreen) setupScreen.classList.remove('hidden');
+            });
+        }
+
+        // --- SETUP LOGIC ---
+        window.saveProjectConfig = function() {
+            const configInput = document.getElementById('configJsonInput').value.trim();
+            try {
+                // Handle cases where user pastes the whole 'const firebaseConfig = { ... };' snippet
+                let jsonString = configInput;
+                if (configInput.includes('{')) {
+                    jsonString = configInput.substring(configInput.indexOf('{'), configInput.lastIndexOf('}') + 1);
+                }
+                
+                // Remove potential JS property names without quotes for cleaner parsing
+                jsonString = jsonString.replace(/(\w+):/g, '"$1":').replace(/'/g, '"').replace(/,(\s*})/g, '$1');
+                
+                const parsed = JSON.parse(jsonString);
+                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing key fields");
+                
+                safeStorage.set('competency_firebase_config', JSON.stringify(parsed));
+                alert("Configuration saved! Reconnecting...");
+                location.reload();
+            } catch (e) {
+                alert("Invalid Format. Please paste the config object: { apiKey: '...', projectId: '...', ... }");
+            }
+        };
+
+        const updateText = (id, text) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        };
+
+        // --- SECURITY CONFIG ---
+        const ADMIN_PASSCODE = "Iamn9thawk"; 
+        const STAFF_PASSCODE = "EndoWPH"; 
+
+        window.state = {
+            user: null,
+            categories: [],
+            skills: [],
+            staffStore: {},
+            lastUpdated: null,
+            unsubscribe: null,
+            accessLevel: null 
+        };
+
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                const savedSession = safeStorage.get('competency_access_session');
+                if (savedSession) {
+                    window.validatePasscode(savedSession, true);
+                }
+            } catch (err) {
+                console.error("Auth System Error:", err);
+            }
+        };
+
+        // --- LOGIN LOGIC ---
+        window.validatePasscode = function(input, isAuto = false) {
+            try {
+                const errorMsg = document.getElementById('loginError');
+                const loginInput = document.getElementById('loginPassInput');
+                
+                if (input === ADMIN_PASSCODE) {
+                    window.state.accessLevel = 'admin';
+                    unlockApp();
+                    safeStorage.set('competency_access_session', input);
+                } else if (input === STAFF_PASSCODE) {
+                    window.state.accessLevel = 'staff';
+                    unlockApp();
+                    safeStorage.set('competency_access_session', input);
+                } else if (!isAuto) {
+                    if (errorMsg) errorMsg.classList.remove('hidden');
+                    if (loginInput) {
+                        loginInput.classList.add('border-red-500', 'ring-2', 'ring-red-100');
+                        setTimeout(() => loginInput.classList.remove('border-red-500', 'ring-2', 'ring-red-100'), 2000);
+                    }
+                }
+            } catch (err) {
+                console.error("Login Logic Error:", err);
+            }
+        };
+
+        window.attemptLogin = () => {
+            const input = document.getElementById('loginPassInput').value.trim();
+            window.validatePasscode(input);
+        };
+
+        window.logout = () => {
+            safeStorage.remove('competency_access_session');
+            location.reload();
+        };
+
+        function unlockApp() {
+            const loginOverlay = document.getElementById('loginOverlay');
+            const appContent = document.getElementById('appContent');
+            const authModeLabel = document.getElementById('authModeLabel');
+            const setupScreen = document.getElementById('setupScreen');
+            
+            if (loginOverlay) loginOverlay.classList.add('hidden');
+            if (setupScreen) setupScreen.classList.add('hidden');
+            if (appContent) appContent.classList.remove('hidden');
+            
+            if (window.state.accessLevel === 'admin') {
+                const adminFooter = document.getElementById('adminFooter');
+                const headerUploadBtn = document.getElementById('headerUploadBtn');
+                if (adminFooter) adminFooter.classList.remove('hidden');
+                if (headerUploadBtn) headerUploadBtn.classList.remove('hidden');
+                if (authModeLabel) {
+                    authModeLabel.classList.remove('hidden');
+                    authModeLabel.textContent = "ADMIN MODE";
+                    authModeLabel.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200";
+                }
+            } else {
+                if (authModeLabel) {
+                    authModeLabel.classList.remove('hidden');
+                    authModeLabel.textContent = "STAFF VIEW";
+                    authModeLabel.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200";
+                }
+            }
+        }
+
+        function getCompetencyDocRef() {
+            return doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest');
+        }
+
+        function setupRealtimeSync() {
+            if (window.state.unsubscribe) window.state.unsubscribe();
+            const docRef = getCompetencyDocRef();
+            
+            window.state.unsubscribe = onSnapshot(docRef, (docSnap) => {
+                const loader = document.getElementById('loader');
+                const setupPanel = document.getElementById('setupPanel');
+                const appStatusMsg = document.getElementById('appStatusMsg');
+                
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.csvText) {
+                        parseCsv(data.csvText);
+                    }
+                } else {
+                    if (loader) loader.classList.add('hidden');
+                    if (window.state.accessLevel === 'admin') {
+                        if (setupPanel) setupPanel.classList.remove('hidden');
+                    } else {
+                        if (appStatusMsg) {
+                            appStatusMsg.classList.remove('hidden');
+                            updateText('statusText', "No records found. Please ask Admin to upload the competency file.");
+                        }
+                    }
+                }
+            }, (err) => {
+                console.error("Database Connection Error:", err);
+                const loader = document.getElementById('loader');
+                if (loader) loader.classList.add('hidden');
+                const appStatusMsg = document.getElementById('appStatusMsg');
+                if (appStatusMsg) {
+                    appStatusMsg.classList.remove('hidden');
+                    updateText('statusText', "Connection Error. Ensure Firestore Rules allow public reading.");
+                }
+            });
+        }
+
+        window.handleFileUpload = (input) => {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                window.saveToCloud(e.target.result);
+                input.value = ""; 
+            };
+            reader.readAsText(file);
+        };
+
+        window.saveToCloud = async (csvText) => {
+            if (!window.state.user) {
+                alert("Authentication is still connecting. Try again in a moment.");
+                return;
+            }
+            const uploadLabel = document.getElementById('uploadLabel');
+            const originalLabel = uploadLabel ? uploadLabel.innerHTML : 'Choose CSV File';
+            if (uploadLabel) uploadLabel.innerHTML = '<span class="text-blue-600 font-bold animate-pulse">UPLOADING...</span>';
+
+            const docRef = getCompetencyDocRef();
+            try {
+                await setDoc(docRef, {
+                    csvText: csvText,
+                    updatedAt: Date.now(),
+                    updatedBy: window.state.user.uid
+                });
+                alert("Database Updated Successfully!");
+                const adminPanel = document.getElementById('adminPanel');
+                if (adminPanel) adminPanel.classList.add('hidden');
+            } catch (err) {
+                alert(err.code === 'permission-denied' ? "Security Rules Denied Access. Check Firebase Console." : "Error: " + err.message);
+            } finally {
+                if (uploadLabel) uploadLabel.innerHTML = originalLabel;
+            }
+        };
+
+        function parseCsv(csvText) {
+            Papa.parse(csvText, {
+                header: false,
+                skipEmptyLines: 'greedy',
+                complete: function(results) {
+                    processSheetData(results.data);
+                }
+            });
+        }
+
+        function processSheetData(rows) {
+            window.state.categories = [];
+            window.state.skills = [];
+            window.state.staffStore = {};
+
+            let headerIndex = -1;
+            for (let i = 0; i < Math.min(rows.length, 25); i++) {
+                const row = rows[i];
+                const contentCols = row.slice(2).filter(c => c && c.trim() !== "").length;
+                if (contentCols > 3) { headerIndex = i; break; }
+            }
+            if (headerIndex === -1) return;
+
+            const headerRow = rows[headerIndex]; 
+            const staffList = [];
+            const exclusionKeywords = ['band', 'grade', 'status', 'total', 'count', 'sum', '%', 'percentage'];
+            let lastDetectedBand = "N/A";
+
+            for (let j = 2; j < headerRow.length; j++) {
+                const rawName = (headerRow[j] || "").trim();
+                if (!rawName) continue;
+                if (exclusionKeywords.some(kw => rawName.toLowerCase().includes(kw))) {
+                    lastDetectedBand = rawName;
+                    continue;
+                }
+                staffList.push({ name: rawName, colIndex: j, band: lastDetectedBand });
+                window.state.staffStore[rawName] = { name: rawName, band: lastDetectedBand, competencies: {} };
+            }
+
+            let currentCategory = "General";
+            for (let i = headerIndex + 1; i < rows.length; i++) {
+                const row = rows[i];
+                const itemLabel = (row[0] || "").trim();
+                if (!itemLabel) continue;
+
+                const hasDataInRow = staffList.some(s => {
+                    const val = (row[s.colIndex] || "").trim().toLowerCase();
+                    return ['yes', 'no', 'y', 'n', 'true', 'false', '1', '0', '✅', '❌'].includes(val);
+                });
+
+                if (!hasDataInRow && itemLabel.length > 3) {
+                    currentCategory = itemLabel;
+                    if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                    continue;
+                }
+
+                window.state.skills.push({ cat: currentCategory, skill: itemLabel });
+                staffList.forEach(staff => {
+                    let val = (row[staff.colIndex] || "").trim().toLowerCase();
+                    let status = (['yes', 'y', 'true', '✅', '1', 'passed'].includes(val)) ? "Yes" : (['no', 'n', 'false', '❌', '0', 'failed'].includes(val) ? "No" : "N/A");
+                    window.state.staffStore[staff.name].competencies[itemLabel] = status;
+                });
+            }
+
+            populateSelectors();
+            document.getElementById('loader')?.classList.add('hidden');
+            document.getElementById('setupPanel')?.classList.add('hidden');
+            document.getElementById('appStatusMsg')?.classList.add('hidden');
+            document.getElementById('mainContent')?.classList.remove('hidden');
+        }
+
+        function populateSelectors() {
+            const select = document.getElementById('staffSelect');
+            const catSelect = document.getElementById('categoryFilter');
+            if (!select || !catSelect) return;
+            const currentSelected = select.value;
+            select.innerHTML = '<option value="">-- Select Your Name --</option>';
+            catSelect.innerHTML = '<option value="all">All Competencies</option>';
+
+            const staffByBand = {};
+            Object.values(window.state.staffStore).forEach(s => {
+                if (!staffByBand[s.band]) staffByBand[s.band] = [];
+                staffByBand[s.band].push(s);
+            });
+
+            Object.keys(staffByBand).sort((a,b) => b.localeCompare(a, undefined, {numeric:true})).forEach(band => {
+                const group = document.createElement('optgroup');
+                group.label = band;
+                staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
+                    const opt = document.createElement('option');
+                    opt.value = s.name; opt.textContent = s.name;
+                    group.appendChild(opt);
+                });
+                select.appendChild(group);
+            });
+
+            window.state.categories.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat; opt.textContent = cat;
+                catSelect.appendChild(opt);
+            });
+
+            if (currentSelected && window.state.staffStore[currentSelected]) {
+                select.value = currentSelected;
+                updateDisplay();
+            }
+        }
+
+        window.updateDisplay = function() {
+            const name = document.getElementById('staffSelect').value;
+            const filter = document.getElementById('categoryFilter').value;
+            const tableBody = document.getElementById('competencyTableBody');
+            
+            if (!name) {
+                document.getElementById('resultsContainer')?.classList.add('hidden');
+                document.getElementById('statsSummary')?.classList.add('hidden');
+                return;
+            }
+
+            const profile = window.state.staffStore[name];
+            document.getElementById('resultsContainer')?.classList.remove('hidden');
+            updateText('displayName', profile.name);
+            updateText('displayBand', profile.band);
+            
+            if (!tableBody) return;
+            tableBody.innerHTML = '';
+            let countYes = 0, countNo = 0;
+            let lastCat = null;
+
+            window.state.skills.forEach(item => {
+                if (filter !== 'all' && item.cat !== filter) return;
+                const status = profile.competencies[item.skill] || "N/A";
+                if (status === "Yes") countYes++;
+                if (status === "No") countNo++;
+
+                if (filter === 'all' && item.cat !== lastCat) {
+                    const hRow = document.createElement('tr');
+                    hRow.className = "category-row";
+                    hRow.innerHTML = `<td colspan="2" class="px-4 py-3 text-[10px] uppercase tracking-[0.2em] font-bold">${item.cat}</td>`;
+                    tableBody.appendChild(hRow);
+                    lastCat = item.cat;
+                }
+
+                const row = document.createElement('tr');
+                let bCls = status === "Yes" ? "status-yes" : (status === "No" ? "status-no" : "status-na");
+                row.innerHTML = `
+                    <td class="p-4 text-slate-700 text-sm font-medium border-b border-slate-50">${item.skill}</td>
+                    <td class="p-4 text-center border-b border-slate-50">
+                        <span class="inline-block w-24 px-3 py-1.5 rounded-lg text-[11px] font-black border ${bCls}">${status.toUpperCase()}</span>
+                    </td>`;
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('statsSummary')?.classList.remove('hidden');
+            updateText('countAchieved', countYes);
+            updateText('countNo', countNo);
+        }
+
+        window.filterStaffList = (e) => {
+            const term = e.target.value.toLowerCase();
+            const options = document.getElementById('staffSelect')?.querySelectorAll('option, optgroup');
+            options?.forEach(opt => {
+                if (opt.tagName === 'OPTGROUP') {
+                    let has = false;
+                    opt.querySelectorAll('option').forEach(c => {
+                        const v = c.textContent.toLowerCase().includes(term);
+                        c.style.display = v ? '' : 'none';
+                        if (v) has = true;
+                    });
+                    opt.style.display = has ? '' : 'none';
+                } else if (opt.value === "") opt.style.display = '';
+            });
+        };
+
+        window.downloadTemplate = () => {
+            const h = ["Competency/Category", "Category Heading (Optional)", ...Object.keys(window.state.staffStore)];
+            const r = [h];
+            window.state.categories.forEach(c => {
+                r.push([c, "TRUE", ...new Array(h.length - 2).fill("")]);
+                window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("N/A")]));
+            });
+            const csv = Papa.unparse(r);
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+            link.download = "competency_template.csv";
+            link.click();
+        };
+
+    </script>
+    <style>
+        .status-yes { background-color: #dcfce7; color: #166534; border-color: #bbf7d0; } 
+        .status-no { background-color: #fee2e2; color: #991b1b; border-color: #fecaca; }  
+        .status-na { background-color: #f1f5f9; color: #475569; border-color: #e2e8f0; }  
+        .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #ffffff; }
+        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #334155; color: white; }
+        .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
+        @keyframes spinner { to { transform: rotate(360deg); } }
+        @media print { .no-print { display: none !important; } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen font-sans text-slate-900">
+
+    <!-- SETUP SCREEN -->
+    <div id="setupScreen" class="hidden fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4 text-center">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
+            <h2 class="text-2xl font-black mb-4">Secure Connection</h2>
+            <p class="text-slate-600 text-sm mb-6 leading-relaxed">
+                Paste your <strong>Firebase Config Object</strong> from the Console to initialize. 
+                This data is stored privately on your machine and is never shared publicly on GitHub.
+            </p>
+            <textarea id="configJsonInput" rows="8" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
+            <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Save & Connect</button>
+            <p class="mt-4 text-[10px] text-slate-400 uppercase font-black tracking-widest leading-loose">Privacy Protected Initialization</p>
+        </div>
+    </div>
+
+    <!-- LOGIN OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
+            <h1 class="text-2xl font-black mb-2 text-slate-900">Private Access</h1>
+            <p class="text-slate-500 text-sm mb-6">Enter access code.</p>
+            <input type="password" id="loginPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="CODE">
+            <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase tracking-wide">Incorrect Code</p>
+            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black transition-all">Unlock</button>
+        </div>
+    </div>
+
+    <div id="appContent" class="hidden max-w-5xl mx-auto px-4 py-8 pb-32">
+        <header class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6 no-print">
+            <div>
+                <h1 class="text-3xl font-black text-slate-900 tracking-tight mb-2">Staff Competency</h1>
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="authModeLabel" class="hidden"></span>
+                    <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-700 uppercase tracking-wider">Update Data</button>
+                    <button onclick="logout()" class="text-[10px] text-slate-400 uppercase font-bold tracking-widest hover:text-red-500 transition-all">Logout</button>
+                </div>
+            </div>
+            <div id="statsSummary" class="hidden flex gap-4 fade-in">
+                <div class="bg-white border border-slate-100 px-5 py-3 rounded-2xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-black text-green-600 tracking-widest block mb-1">Pass</span>
+                    <span id="countAchieved" class="text-2xl font-black text-slate-800">0</span>
+                </div>
+                <div class="bg-white border border-slate-100 px-5 py-3 rounded-2xl shadow-sm text-center">
+                    <span class="text-[10px] uppercase font-black text-red-600 tracking-widest block mb-1">Gap</span>
+                    <span id="countNo" class="text-2xl font-black text-slate-800">0</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="appStatusMsg" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
+            <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
+            <h2 class="text-xl font-black text-slate-900 mb-2">Notice</h2>
+            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto leading-relaxed">Connecting...</p>
+        </div>
+
+        <div id="setupPanel" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
+            <h2 class="text-2xl font-black text-slate-900 mb-2">Empty Database</h2>
+            <p class="text-slate-500 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
+            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black hover:bg-black transition-all shadow-xl">Open Admin Tool</button>
+        </div>
+
+        <div id="loader" class="flex flex-col items-center justify-center py-32">
+            <div class="loading-spinner w-10 h-10 border-4 border-slate-200 rounded-full mb-6"></div>
+            <p class="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Data...</p>
+        </div>
+
+        <div id="mainContent" class="hidden fade-in">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
+                <div class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row">
+                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-medium w-full sm:w-1/3" />
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-800 outline-none"><option value="">-- Select Name --</option></select>
+                </div>
+                <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                    <select id="categoryFilter" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-500 outline-none"><option value="all">Filter Categories</option></select>
+                </div>
+            </div>
+
+            <div id="resultsContainer" class="hidden">
+                <div class="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
+                    <div class="bg-slate-900 text-white p-8">
+                        <div class="flex justify-between items-start">
+                            <div><h2 id="displayName" class="text-3xl font-black tracking-tight">Name</h2><span id="displayBand" class="inline-block bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase mt-2">Grade</span></div>
+                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all">PRINT</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead class="sticky-header shadow-sm"><tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest"><th class="p-6 border-b border-slate-100">Competency</th><th class="p-6 border-b border-slate-100 w-40 text-center">Status</th></tr></thead><tbody id="competencyTableBody"></tbody></table></div>
+                </div>
+            </div>
+        </div>
+
+        <footer id="adminFooter" class="hidden mt-20 pt-10 border-t border-slate-200 no-print text-center">
+            <div id="adminPanel" class="hidden mt-10 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto fade-in">
+                <h3 class="text-lg font-black text-slate-900 mb-2">Update Database</h3>
+                <p class="text-sm text-slate-500 mb-6 leading-relaxed">Upload a CSV to update cloud records. Data updates instantly for all users.</p>
+                <div class="flex flex-wrap gap-2 mb-8 justify-center">
+                    <button onclick="downloadTemplate()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full font-black uppercase tracking-widest text-slate-600">Download Template</button>
+                    <button onclick="if(confirm('Clear database connection settings?')){safeStorage.remove('competency_firebase_config'); location.reload();}" class="text-[10px] bg-red-50 hover:bg-red-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-red-600">Reset Connection</button>
+                </div>
+                <label class="block w-full cursor-pointer">
+                    <input type="file" accept=".csv" onchange="handleFileUpload(this)" class="hidden">
+                    <div class="bg-slate-50 border-2 border-dashed border-slate-200 p-12 rounded-3xl hover:bg-slate-100 hover:border-blue-400 transition-all text-center">
+                        <div class="bg-white w-12 h-12 rounded-xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        </div>
+                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase">Choose CSV File</span>
+                    </div>
+                </label>
+            </div>
+        </footer>
+
+        <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 pt-8">
+            <p class="text-[10px] uppercase font-black tracking-widest text-slate-300 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit Wexham Park Hospital and Gemini</p>
+        </div>
+    </div>
+</body>
+</html>
