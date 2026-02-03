@@ -20,7 +20,6 @@
 
         // --- DATABASE CONFIGURATION ---
         // THESE ARE LEFT EMPTY FOR SECURITY. 
-        // When you run this on GitHub, the "Setup" screen will ask you to paste your config.
         let firebaseConfig = {
             apiKey: "", 
             authDomain: "",
@@ -38,14 +37,32 @@
             firebaseConfig = JSON.parse(__firebase_config);
             appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
         } 
-        // 2. Check for Saved Local Config (GitHub Hosting)
+        // 2. Check for "Magic Link" Configuration (Auto-Setup from URL)
         else {
-            const savedConfig = safeStorage.get('competency_firebase_config');
-            if (savedConfig) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const magicConfig = urlParams.get('cfg');
+            if (magicConfig) {
                 try {
-                    firebaseConfig = JSON.parse(savedConfig);
-                } catch(e) {
-                    safeStorage.remove('competency_firebase_config');
+                    const decoded = atob(magicConfig); // Decode Base64
+                    const parsed = JSON.parse(decoded);
+                    if (parsed.apiKey && parsed.projectId) {
+                        safeStorage.set('competency_firebase_config', decoded);
+                        firebaseConfig = parsed;
+                        // Clean the URL so the key isn't visible in the address bar
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    }
+                } catch(e) { console.error("Invalid Magic Link"); }
+            }
+            
+            // 3. Check for Saved Local Config (GitHub Hosting)
+            if (!firebaseConfig.apiKey) {
+                const savedConfig = safeStorage.get('competency_firebase_config');
+                if (savedConfig) {
+                    try {
+                        firebaseConfig = JSON.parse(savedConfig);
+                    } catch(e) {
+                        safeStorage.remove('competency_firebase_config');
+                    }
                 }
             }
         }
@@ -88,27 +105,44 @@
             const configInput = document.getElementById('configJsonInput').value.trim();
             try {
                 let jsonString = configInput;
-                
-                // Extract object literal from text (handles "const firebaseConfig = { ... }")
-                const firstBrace = jsonString.indexOf('{');
-                const lastBrace = jsonString.lastIndexOf('}');
-                
-                if (firstBrace !== -1 && lastBrace !== -1) {
-                    jsonString = jsonString.substring(firstBrace, lastBrace + 1);
+                if (configInput.includes('{')) {
+                    jsonString = configInput.substring(configInput.indexOf('{'), configInput.lastIndexOf('}') + 1);
                 }
-
-                // Parse using Function constructor to support standard JS object syntax (unquoted keys, comments, etc.)
-                // This is robust against copy-paste variations from the Firebase Console
-                const parsed = new Function("return " + jsonString)();
+                // Cleanup non-standard JSON
+                jsonString = jsonString.replace(/(\w+):/g, '"$1":').replace(/'/g, '"').replace(/,(\s*})/g, '$1');
                 
-                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing required fields: apiKey or projectId");
+                const parsed = JSON.parse(jsonString);
+                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing key fields");
                 
                 safeStorage.set('competency_firebase_config', JSON.stringify(parsed));
                 alert("Configuration saved! Reconnecting...");
                 location.reload();
             } catch (e) {
-                console.error("Config Parsing Error:", e);
-                alert("Format Error: " + e.message + "\n\nTip: Copy the entire { ... } block from your Firebase settings.");
+                alert("Invalid Format. Please paste the config object: { apiKey: '...', projectId: '...', ... }");
+            }
+        };
+
+        window.generateShareLink = function() {
+            const currentConfig = safeStorage.get('competency_firebase_config');
+            if (!currentConfig) {
+                alert("No configuration found to share.");
+                return;
+            }
+            try {
+                const encoded = btoa(currentConfig); // Base64 encode
+                const shareUrl = `${window.location.origin}${window.location.pathname}?cfg=${encoded}`;
+                
+                // Copy to clipboard
+                const tempInput = document.createElement("input");
+                tempInput.value = shareUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempInput);
+                
+                alert("✨ Magic Link Copied! ✨\n\nSend this link to your staff. When they click it, the app will auto-configure for them.");
+            } catch(e) {
+                alert("Could not generate link.");
             }
         };
 
@@ -367,7 +401,7 @@
             const catSelect = document.getElementById('categoryFilter');
             if (!select || !catSelect) return;
             const currentSelected = select.value;
-            select.innerHTML = '<option value="">-- Select Your Name --</option>';
+            select.innerHTML = '<option value="">-- Select Name --</option>';
             catSelect.innerHTML = '<option value="all">All Competencies</option>';
 
             const staffByBand = {};
@@ -592,6 +626,7 @@
                 <div class="flex flex-wrap gap-2 mb-8 justify-center">
                     <button onclick="downloadTemplate()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full font-black uppercase tracking-widest text-slate-600">Download Template</button>
                     <button onclick="if(confirm('Clear database connection settings?')){safeStorage.remove('competency_firebase_config'); location.reload();}" class="text-[10px] bg-red-50 hover:bg-red-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-red-600">Reset Connection</button>
+                    <button onclick="generateShareLink()" class="text-[10px] bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-blue-600">Copy Staff Link</button>
                 </div>
                 <label class="block w-full cursor-pointer">
                     <input type="file" accept=".csv" onchange="handleFileUpload(this)" class="hidden">
