@@ -11,7 +11,7 @@
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Helper for safe storage (prevents crashes in private browsing or hospital networks)
+        // Helper for safe storage
         const safeStorage = {
             set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} },
             get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
@@ -19,7 +19,6 @@
         };
 
         // --- DATABASE CONFIGURATION ---
-        // THESE ARE LEFT EMPTY FOR SECURITY. 
         let firebaseConfig = {
             apiKey: "", 
             authDomain: "",
@@ -32,36 +31,47 @@
 
         let appId = 'my-staff-tracker-v1';
 
-        // 1. Check for Environment Config (Canvas Internal)
+        // 1. Check for Environment Config (Canvas)
         if (typeof __firebase_config !== 'undefined') {
             firebaseConfig = JSON.parse(__firebase_config);
             appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
         } 
-        // 2. Check for "Magic Link" Configuration (Auto-Setup from URL)
+        // 2. Check for "Magic Link" Configuration (Auto-Setup via URL)
         else {
             const urlParams = new URLSearchParams(window.location.search);
             const magicConfig = urlParams.get('cfg');
+            
             if (magicConfig) {
                 try {
-                    const decoded = atob(magicConfig); // Decode Base64
+                    // Try to decode and load the config from URL
+                    const decoded = atob(magicConfig);
                     const parsed = JSON.parse(decoded);
                     if (parsed.apiKey && parsed.projectId) {
-                        safeStorage.set('competency_firebase_config', decoded);
+                        // Successfully loaded from URL
+                        safeStorage.set('competency_firebase_config', decoded); // Persist it
                         firebaseConfig = parsed;
-                        // Clean the URL so the key isn't visible in the address bar
-                        window.history.replaceState({}, document.title, window.location.pathname);
+                        
+                        // Optional: Clean URL for aesthetics, but keeping it helps bookmarks work
+                        // window.history.replaceState({}, document.title, window.location.pathname);
                     }
-                } catch(e) { console.error("Invalid Magic Link"); }
+                } catch(e) { console.error("Invalid Magic Link Params"); }
             }
             
-            // 3. Check for Saved Local Config (GitHub Hosting)
+            // 3. Fallback to Local Storage if URL didn't provide it
             if (!firebaseConfig.apiKey) {
                 const savedConfig = safeStorage.get('competency_firebase_config');
                 if (savedConfig) {
                     try {
-                        firebaseConfig = JSON.parse(savedConfig);
+                        // Check if it's already a JSON object or a raw string
+                        if (savedConfig.trim().startsWith('{')) {
+                             firebaseConfig = JSON.parse(savedConfig);
+                        } else {
+                             // Legacy/Double encoded check
+                             firebaseConfig = JSON.parse(savedConfig); 
+                        }
                     } catch(e) {
-                        safeStorage.remove('competency_firebase_config');
+                        console.warn("Saved config corrupted", e);
+                        // Don't auto-delete yet, let the user see the setup screen
                     }
                 }
             }
@@ -84,7 +94,8 @@
                 initAuth();
             } catch (err) {
                 console.error("Firebase Init Error:", err);
-                safeStorage.remove('competency_firebase_config');
+                // Only clear if we are SURE it's bad data to prevent loops
+                // safeStorage.remove('competency_firebase_config'); 
                 showSetupScreen();
             }
         } else {
@@ -100,36 +111,50 @@
             });
         }
 
-        // --- SETUP LOGIC ---
+        // --- SETUP LOGIC (Improved Parsing) ---
         window.saveProjectConfig = function() {
             const configInput = document.getElementById('configJsonInput').value.trim();
             try {
                 let jsonString = configInput;
-                if (configInput.includes('{')) {
-                    jsonString = configInput.substring(configInput.indexOf('{'), configInput.lastIndexOf('}') + 1);
+                
+                // Extract object literal if user pasted the whole line
+                const firstBrace = jsonString.indexOf('{');
+                const lastBrace = jsonString.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1) {
+                    jsonString = jsonString.substring(firstBrace, lastBrace + 1);
                 }
-                // Cleanup non-standard JSON
-                jsonString = jsonString.replace(/(\w+):/g, '"$1":').replace(/'/g, '"').replace(/,(\s*})/g, '$1');
+
+                // Robust parsing using Function constructor to handle JS objects (unquoted keys)
+                const parsed = new Function("return " + jsonString)();
                 
-                const parsed = JSON.parse(jsonString);
-                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing key fields");
+                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing apiKey or projectId");
                 
+                // Save as pure stringified JSON
                 safeStorage.set('competency_firebase_config', JSON.stringify(parsed));
-                alert("Configuration saved! Reconnecting...");
+                
+                alert("Configuration saved! Connecting...");
                 location.reload();
             } catch (e) {
-                alert("Invalid Format. Please paste the config object: { apiKey: '...', projectId: '...', ... }");
+                alert("Format Error: " + e.message + "\n\nPlease copy the { ... } block exactly from Firebase Console.");
             }
         };
 
         window.generateShareLink = function() {
-            const currentConfig = safeStorage.get('competency_firebase_config');
-            if (!currentConfig) {
+            // Re-read current config to ensure we share what is working
+            let currentConfigStr = safeStorage.get('competency_firebase_config');
+            
+            // If we are running in Canvas or via existing URL param, use that source
+            if (!currentConfigStr && firebaseConfig.apiKey) {
+                currentConfigStr = JSON.stringify(firebaseConfig);
+            }
+
+            if (!currentConfigStr) {
                 alert("No configuration found to share.");
                 return;
             }
+
             try {
-                const encoded = btoa(currentConfig); // Base64 encode
+                const encoded = btoa(currentConfigStr); // Base64 encode
                 const shareUrl = `${window.location.origin}${window.location.pathname}?cfg=${encoded}`;
                 
                 // Copy to clipboard
@@ -140,7 +165,7 @@
                 document.execCommand("copy");
                 document.body.removeChild(tempInput);
                 
-                alert("✨ Magic Link Copied! ✨\n\nSend this link to your staff. When they click it, the app will auto-configure for them.");
+                alert("✨ Magic Link Copied! ✨\n\n1. Bookmark this link for yourself (Admin).\n2. Send this link to Staff.\n\nThey will never need to setup manually with this link.");
             } catch(e) {
                 alert("Could not generate link.");
             }
@@ -538,7 +563,7 @@
                 Paste your <strong>Firebase Config Object</strong> from the Console to initialize. 
                 This data is stored privately on your machine and is never shared publicly on GitHub.
             </p>
-            <textarea id="configJsonInput" rows="8" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='apiKey: "AIza...", projectId: "...", ...'></textarea>
+            <textarea id="configJsonInput" rows="8" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
             <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Save & Connect</button>
             <p class="mt-4 text-[10px] text-slate-400 uppercase font-black tracking-widest leading-loose">Privacy Protected Initialization</p>
         </div>
