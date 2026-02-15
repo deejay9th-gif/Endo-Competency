@@ -31,10 +31,14 @@
 
         let appId = 'my-staff-tracker-v1';
 
-        // 1. Check for Environment Config (Canvas)
+        // 1. Check for Environment Config (Canvas/Immersive)
         if (typeof __firebase_config !== 'undefined') {
-            firebaseConfig = JSON.parse(__firebase_config);
-            appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+                appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
+            } catch (e) {
+                console.warn("Error parsing system firebase config", e);
+            }
         } 
         // 2. Check for "Magic Link" Configuration (Auto-Setup via URL)
         else {
@@ -582,23 +586,35 @@
     </div>
 
     <div id="appContent" class="hidden max-w-5xl mx-auto px-4 py-8 pb-32">
-        <header class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6 no-print">
-            <div>
-                <h1 class="text-3xl font-black text-slate-900 tracking-tight mb-2">Staff Competency</h1>
-                <div class="flex flex-wrap items-center gap-3">
-                    <span id="authModeLabel" class="hidden"></span>
-                    <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-blue-700 uppercase tracking-wider">Update Data</button>
-                    <button onclick="logout()" class="text-[10px] text-slate-400 uppercase font-bold tracking-widest hover:text-red-500 transition-all">Logout</button>
+        <header class="mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
+            <div class="flex items-center gap-5">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Staff Competency</h1>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Endoscopy Unit</span>
+                        <div class="h-1 w-1 rounded-full bg-slate-300"></div>
+                        <span id="authModeLabel" class="hidden"></span>
+                        <button onclick="logout()" class="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
+                    </div>
                 </div>
             </div>
-            <div id="statsSummary" class="hidden flex gap-4 fade-in">
-                <div class="bg-white border border-slate-100 px-5 py-3 rounded-2xl shadow-sm text-center">
-                    <span class="text-[10px] uppercase font-black text-green-600 tracking-widest block mb-1">Pass</span>
-                    <span id="countAchieved" class="text-2xl font-black text-slate-800">0</span>
-                </div>
-                <div class="bg-white border border-slate-100 px-5 py-3 rounded-2xl shadow-sm text-center">
-                    <span class="text-[10px] uppercase font-black text-red-600 tracking-widest block mb-1">Gap</span>
-                    <span id="countNo" class="text-2xl font-black text-slate-800">0</span>
+
+            <div class="flex items-center gap-4 self-end xl:self-auto">
+                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all transform hover:-translate-y-0.5">
+                    Update Data
+                </button>
+                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-3 fade-in">
+                    <div class="bg-white/50 backdrop-blur-sm border border-emerald-200/60 px-5 py-3 rounded-2xl shadow-sm text-center min-w-[110px] flex flex-col justify-center">
+                        <span class="text-[9px] uppercase font-black text-emerald-600 tracking-widest mb-1 leading-none">Competent</span>
+                        <span id="countAchieved" class="text-2xl font-black text-emerald-700">0</span>
+                    </div>
+                    <div class="bg-white/50 backdrop-blur-sm border border-red-200/60 px-5 py-3 rounded-2xl shadow-sm text-center min-w-[130px] flex flex-col justify-center">
+                        <span class="text-[9px] uppercase font-black text-red-600 tracking-widest mb-1 leading-none">Needs Completion</span>
+                        <span id="countNo" class="text-2xl font-black text-red-700">0</span>
+                    </div>
                 </div>
             </div>
         </header>
