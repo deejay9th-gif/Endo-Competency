@@ -9,7 +9,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Helper for safe storage
         const safeStorage = {
@@ -18,90 +18,64 @@
             remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
         };
 
-        // --- DATABASE CONFIGURATION ---
-        let firebaseConfig = {
-            apiKey: "", 
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: "",
-            measurementId: ""
+        // --- VALIDITY RULES (Months) ---
+        const VALIDITY_RULES = {
+            "RECOVERY": 12,
+            "GENERAL": 12,
+            "ENDOSCOPY ROOM": 12,
+            "CONSENTS AND DISCHARGING": 12,
+            "ROOM COMPETENCIES": 12,
+            "UPPER GI PROCEDURES": 6,
+            "ASSISTING WITH EMERGENCY GI BLEEDS": 6,
+            "LOWER GI PROCEDURES": 6,
+            "ERCP": 4,
+            "DECONTAMINATION": 6,
+            "JETS WORKFORCE": 12
         };
 
+        // --- DATABASE CONFIGURATION ---
+        let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" };
         let appId = 'my-staff-tracker-v1';
 
-        // 1. Check for Environment Config (Canvas/Immersive)
         if (typeof __firebase_config !== 'undefined') {
             try {
                 firebaseConfig = JSON.parse(__firebase_config);
                 appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
-            } catch (e) {
-                console.warn("Error parsing system firebase config", e);
-            }
-        } 
-        // 2. Check for "Magic Link" Configuration (Auto-Setup via URL)
-        else {
+            } catch (e) { console.warn("Error parsing config", e); }
+        } else {
             const urlParams = new URLSearchParams(window.location.search);
             const magicConfig = urlParams.get('cfg');
-            
             if (magicConfig) {
                 try {
-                    // Try to decode and load the config from URL
                     const decoded = atob(magicConfig);
                     const parsed = JSON.parse(decoded);
                     if (parsed.apiKey && parsed.projectId) {
-                        // Successfully loaded from URL
-                        safeStorage.set('competency_firebase_config', decoded); // Persist it
+                        safeStorage.set('competency_firebase_config', decoded);
                         firebaseConfig = parsed;
-                        
-                        // Optional: Clean URL for aesthetics, but keeping it helps bookmarks work
-                        // window.history.replaceState({}, document.title, window.location.pathname);
                     }
-                } catch(e) { console.error("Invalid Magic Link Params"); }
+                } catch(e) { console.error("Invalid Magic Link"); }
             }
-            
-            // 3. Fallback to Local Storage if URL didn't provide it
             if (!firebaseConfig.apiKey) {
                 const savedConfig = safeStorage.get('competency_firebase_config');
                 if (savedConfig) {
-                    try {
-                        // Check if it's already a JSON object or a raw string
-                        if (savedConfig.trim().startsWith('{')) {
-                             firebaseConfig = JSON.parse(savedConfig);
-                        } else {
-                             // Legacy/Double encoded check
-                             firebaseConfig = JSON.parse(savedConfig); 
-                        }
-                    } catch(e) {
-                        console.warn("Saved config corrupted", e);
-                        // Don't auto-delete yet, let the user see the setup screen
-                    }
+                    try { firebaseConfig = JSON.parse(savedConfig.trim().startsWith('{') ? savedConfig : `"${savedConfig}"`); } catch(e) {}
                 }
             }
         }
 
         let auth, db;
         
-        // Initialize if we have a valid configuration
         if (firebaseConfig.apiKey && firebaseConfig.projectId) {
             try {
                 const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
-                
                 onAuthStateChanged(auth, (user) => {
                     window.state.user = user;
                     if (user) setupRealtimeSync();
                 });
-
                 initAuth();
-            } catch (err) {
-                console.error("Firebase Init Error:", err);
-                // Only clear if we are SURE it's bad data to prevent loops
-                // safeStorage.remove('competency_firebase_config'); 
-                showSetupScreen();
-            }
+            } catch (err) { showSetupScreen(); }
         } else {
             showSetupScreen();
         }
@@ -115,205 +89,101 @@
             });
         }
 
-        // --- SETUP LOGIC (Improved Parsing) ---
         window.saveProjectConfig = function() {
             const configInput = document.getElementById('configJsonInput').value.trim();
             try {
                 let jsonString = configInput;
-                
-                // Extract object literal if user pasted the whole line
                 const firstBrace = jsonString.indexOf('{');
                 const lastBrace = jsonString.lastIndexOf('}');
-                if (firstBrace !== -1 && lastBrace !== -1) {
-                    jsonString = jsonString.substring(firstBrace, lastBrace + 1);
-                }
-
-                // Robust parsing using Function constructor to handle JS objects (unquoted keys)
+                if (firstBrace !== -1 && lastBrace !== -1) jsonString = jsonString.substring(firstBrace, lastBrace + 1);
                 const parsed = new Function("return " + jsonString)();
-                
-                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing apiKey or projectId");
-                
-                // Save as pure stringified JSON
+                if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing credentials");
                 safeStorage.set('competency_firebase_config', JSON.stringify(parsed));
-                
                 alert("Configuration saved! Connecting...");
                 location.reload();
-            } catch (e) {
-                alert("Format Error: " + e.message + "\n\nPlease copy the { ... } block exactly from Firebase Console.");
-            }
+            } catch (e) { alert("Format Error: " + e.message); }
         };
 
         window.generateShareLink = function() {
-            // Re-read current config to ensure we share what is working
-            let currentConfigStr = safeStorage.get('competency_firebase_config');
-            
-            // If we are running in Canvas or via existing URL param, use that source
-            if (!currentConfigStr && firebaseConfig.apiKey) {
-                currentConfigStr = JSON.stringify(firebaseConfig);
-            }
-
-            if (!currentConfigStr) {
-                alert("No configuration found to share.");
-                return;
-            }
-
+            let currentConfigStr = safeStorage.get('competency_firebase_config') || JSON.stringify(firebaseConfig);
+            if (!currentConfigStr || !firebaseConfig.apiKey) return alert("No configuration found.");
             try {
-                const encoded = btoa(currentConfigStr); // Base64 encode
+                const encoded = btoa(currentConfigStr);
                 const shareUrl = `${window.location.origin}${window.location.pathname}?cfg=${encoded}`;
-                
-                // Copy to clipboard
                 const tempInput = document.createElement("input");
                 tempInput.value = shareUrl;
                 document.body.appendChild(tempInput);
                 tempInput.select();
                 document.execCommand("copy");
                 document.body.removeChild(tempInput);
-                
-                alert("✨ Magic Link Copied! ✨\n\n1. Bookmark this link for yourself (Admin).\n2. Send this link to Staff.\n\nThey will never need to setup manually with this link.");
-            } catch(e) {
-                alert("Could not generate link.");
-            }
+                alert("✨ Magic Link Copied! Send this link to Staff to allow access.");
+            } catch(e) { alert("Could not generate link."); }
         };
 
-        const updateText = (id, text) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = text;
-        };
+        const updateText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
-        // --- SECURITY CONFIG ---
+        // --- SECURITY ---
         const ADMIN_PASSCODE = "Iamn9thawk"; 
         const STAFF_PASSCODE = "EndoWPH"; 
 
-        window.state = {
-            user: null,
-            categories: [],
-            skills: [],
-            staffStore: {},
-            lastUpdated: null,
-            unsubscribe: null,
-            accessLevel: null 
-        };
+        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null };
 
         async function initAuth() {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+                else await signInAnonymously(auth);
 
                 const savedSession = safeStorage.get('competency_access_session');
-                if (savedSession) {
-                    window.validatePasscode(savedSession, true);
-                }
-            } catch (err) {
-                console.error("Auth System Error:", err);
-            }
+                if (savedSession) window.validatePasscode(savedSession, true);
+            } catch (err) { console.error("Auth Error:", err); }
         };
 
-        // --- LOGIN LOGIC ---
         window.validatePasscode = function(input, isAuto = false) {
-            try {
-                const errorMsg = document.getElementById('loginError');
-                const loginInput = document.getElementById('loginPassInput');
-                
-                if (input === ADMIN_PASSCODE) {
-                    window.state.accessLevel = 'admin';
-                    unlockApp();
-                    safeStorage.set('competency_access_session', input);
-                } else if (input === STAFF_PASSCODE) {
-                    window.state.accessLevel = 'staff';
-                    unlockApp();
-                    safeStorage.set('competency_access_session', input);
-                } else if (!isAuto) {
-                    if (errorMsg) errorMsg.classList.remove('hidden');
-                    if (loginInput) {
-                        loginInput.classList.add('border-red-500', 'ring-2', 'ring-red-100');
-                        setTimeout(() => loginInput.classList.remove('border-red-500', 'ring-2', 'ring-red-100'), 2000);
-                    }
-                }
-            } catch (err) {
-                console.error("Login Logic Error:", err);
+            const errorMsg = document.getElementById('loginError');
+            const loginInput = document.getElementById('loginPassInput');
+            if (input === ADMIN_PASSCODE) {
+                window.state.accessLevel = 'admin'; unlockApp(); safeStorage.set('competency_access_session', input);
+            } else if (input === STAFF_PASSCODE) {
+                window.state.accessLevel = 'staff'; unlockApp(); safeStorage.set('competency_access_session', input);
+            } else if (!isAuto) {
+                if (errorMsg) errorMsg.classList.remove('hidden');
+                if (loginInput) { loginInput.classList.add('border-red-500', 'ring-2'); setTimeout(() => loginInput.classList.remove('border-red-500', 'ring-2'), 2000); }
             }
         };
 
-        window.attemptLogin = () => {
-            const input = document.getElementById('loginPassInput').value.trim();
-            window.validatePasscode(input);
-        };
-
-        window.logout = () => {
-            safeStorage.remove('competency_access_session');
-            location.reload();
-        };
+        window.attemptLogin = () => window.validatePasscode(document.getElementById('loginPassInput').value.trim());
+        window.logout = () => { safeStorage.remove('competency_access_session'); location.reload(); };
 
         function unlockApp() {
-            const loginOverlay = document.getElementById('loginOverlay');
-            const appContent = document.getElementById('appContent');
-            const authModeLabel = document.getElementById('authModeLabel');
-            const setupScreen = document.getElementById('setupScreen');
-            
-            if (loginOverlay) loginOverlay.classList.add('hidden');
-            if (setupScreen) setupScreen.classList.add('hidden');
-            if (appContent) appContent.classList.remove('hidden');
+            document.getElementById('loginOverlay')?.classList.add('hidden');
+            document.getElementById('setupScreen')?.classList.add('hidden');
+            document.getElementById('appContent')?.classList.remove('hidden');
             
             if (window.state.accessLevel === 'admin') {
-                const adminFooter = document.getElementById('adminFooter');
-                const headerUploadBtn = document.getElementById('headerUploadBtn');
-                if (adminFooter) adminFooter.classList.remove('hidden');
-                if (headerUploadBtn) headerUploadBtn.classList.remove('hidden');
-                if (authModeLabel) {
-                    authModeLabel.classList.remove('hidden');
-                    authModeLabel.textContent = "ADMIN MODE";
-                    authModeLabel.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200";
-                }
+                document.getElementById('adminFooter')?.classList.remove('hidden');
+                document.getElementById('headerUploadBtn')?.classList.remove('hidden');
+                const lbl = document.getElementById('authModeLabel');
+                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "ADMIN MODE"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200"; }
             } else {
-                if (authModeLabel) {
-                    authModeLabel.classList.remove('hidden');
-                    authModeLabel.textContent = "STAFF VIEW";
-                    authModeLabel.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200";
-                }
+                const lbl = document.getElementById('authModeLabel');
+                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "STAFF VIEW"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200"; }
             }
-        }
-
-        function getCompetencyDocRef() {
-            return doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest');
         }
 
         function setupRealtimeSync() {
             if (window.state.unsubscribe) window.state.unsubscribe();
-            const docRef = getCompetencyDocRef();
-            
-            window.state.unsubscribe = onSnapshot(docRef, (docSnap) => {
-                const loader = document.getElementById('loader');
-                const setupPanel = document.getElementById('setupPanel');
-                const appStatusMsg = document.getElementById('appStatusMsg');
-                
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    if (data.csvText) {
-                        parseCsv(data.csvText);
-                    }
+            window.state.unsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest'), (docSnap) => {
+                if (docSnap.exists() && docSnap.data().csvText) {
+                    parseCsv(docSnap.data().csvText);
                 } else {
-                    if (loader) loader.classList.add('hidden');
-                    if (window.state.accessLevel === 'admin') {
-                        if (setupPanel) setupPanel.classList.remove('hidden');
-                    } else {
-                        if (appStatusMsg) {
-                            appStatusMsg.classList.remove('hidden');
-                            updateText('statusText', "No records found. Please ask Admin to upload the competency file.");
-                        }
-                    }
+                    document.getElementById('loader')?.classList.add('hidden');
+                    if (window.state.accessLevel === 'admin') document.getElementById('setupPanel')?.classList.remove('hidden');
+                    else { document.getElementById('appStatusMsg')?.classList.remove('hidden'); updateText('statusText', "No records found."); }
                 }
             }, (err) => {
-                console.error("Database Connection Error:", err);
-                const loader = document.getElementById('loader');
-                if (loader) loader.classList.add('hidden');
-                const appStatusMsg = document.getElementById('appStatusMsg');
-                if (appStatusMsg) {
-                    appStatusMsg.classList.remove('hidden');
-                    updateText('statusText', "Connection Error. Ensure Firestore Rules allow public reading.");
-                }
+                document.getElementById('loader')?.classList.add('hidden');
+                document.getElementById('appStatusMsg')?.classList.remove('hidden');
+                updateText('statusText', "Connection Error.");
             });
         }
 
@@ -321,76 +191,61 @@
             const file = input.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = (e) => {
-                window.saveToCloud(e.target.result);
-                input.value = ""; 
-            };
+            reader.onload = (e) => { window.saveToCloud(e.target.result); input.value = ""; };
             reader.readAsText(file);
         };
 
         window.saveToCloud = async (csvText) => {
-            if (!window.state.user) {
-                alert("Authentication is still connecting. Try again in a moment.");
-                return;
-            }
+            if (!window.state.user) return alert("Still connecting...");
             const uploadLabel = document.getElementById('uploadLabel');
             const originalLabel = uploadLabel ? uploadLabel.innerHTML : 'Choose CSV File';
             if (uploadLabel) uploadLabel.innerHTML = '<span class="text-blue-600 font-bold animate-pulse">UPLOADING...</span>';
 
-            const docRef = getCompetencyDocRef();
             try {
-                await setDoc(docRef, {
-                    csvText: csvText,
-                    updatedAt: Date.now(),
-                    updatedBy: window.state.user.uid
-                });
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest'), { csvText: csvText, updatedAt: Date.now() });
                 alert("Database Updated Successfully!");
-                const adminPanel = document.getElementById('adminPanel');
-                if (adminPanel) adminPanel.classList.add('hidden');
-            } catch (err) {
-                alert(err.code === 'permission-denied' ? "Security Rules Denied Access. Check Firebase Console." : "Error: " + err.message);
-            } finally {
-                if (uploadLabel) uploadLabel.innerHTML = originalLabel;
-            }
+                document.getElementById('adminPanel')?.classList.add('hidden');
+            } catch (err) { alert("Upload error: " + err.message); }
+            finally { if (uploadLabel) uploadLabel.innerHTML = originalLabel; }
         };
 
         function parseCsv(csvText) {
-            Papa.parse(csvText, {
-                header: false,
-                skipEmptyLines: 'greedy',
-                complete: function(results) {
-                    processSheetData(results.data);
-                }
-            });
+            Papa.parse(csvText, { header: false, skipEmptyLines: 'greedy', complete: (res) => processSheetData(res.data) });
+        }
+
+        // --- DATE PARSING HELPER ---
+        function parseDateString(val) {
+            if (!val) return null;
+            val = val.trim();
+            // Check for UK Date format: DD/MM/YYYY or DD-MM-YYYY
+            const ukMatch = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (ukMatch) return new Date(ukMatch[3], ukMatch[2] - 1, ukMatch[1]);
+            // Fallback to JS standard Date parsing (handles "Jan 1, 2026")
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) return d;
+            return null;
         }
 
         function processSheetData(rows) {
-            window.state.categories = [];
-            window.state.skills = [];
-            window.state.staffStore = {};
+            window.state.categories = []; window.state.skills = []; window.state.staffStore = {};
 
             let headerIndex = -1;
             for (let i = 0; i < Math.min(rows.length, 25); i++) {
-                const row = rows[i];
-                const contentCols = row.slice(2).filter(c => c && c.trim() !== "").length;
-                if (contentCols > 3) { headerIndex = i; break; }
+                if (rows[i].slice(2).filter(c => c && c.trim() !== "").length > 3) { headerIndex = i; break; }
             }
             if (headerIndex === -1) return;
 
             const headerRow = rows[headerIndex]; 
             const staffList = [];
-            const exclusionKeywords = ['band', 'grade', 'status', 'total', 'count', 'sum', '%', 'percentage'];
-            let lastDetectedBand = "N/A";
+            const exclusionKeywords = ['band', 'grade', 'status', 'total', 'count', 'sum', '%'];
+            let lastBand = "N/A";
 
             for (let j = 2; j < headerRow.length; j++) {
                 const rawName = (headerRow[j] || "").trim();
                 if (!rawName) continue;
-                if (exclusionKeywords.some(kw => rawName.toLowerCase().includes(kw))) {
-                    lastDetectedBand = rawName;
-                    continue;
-                }
-                staffList.push({ name: rawName, colIndex: j, band: lastDetectedBand });
-                window.state.staffStore[rawName] = { name: rawName, band: lastDetectedBand, competencies: {} };
+                if (exclusionKeywords.some(kw => rawName.toLowerCase().includes(kw))) { lastBand = rawName; continue; }
+                staffList.push({ name: rawName, colIndex: j, band: lastBand });
+                window.state.staffStore[rawName] = { name: rawName, band: lastBand, competencies: {} };
             }
 
             let currentCategory = "General";
@@ -399,9 +254,12 @@
                 const itemLabel = (row[0] || "").trim();
                 if (!itemLabel) continue;
 
+                // Detect category headers vs competencies
                 const hasDataInRow = staffList.some(s => {
-                    const val = (row[s.colIndex] || "").trim().toLowerCase();
-                    return ['yes', 'no', 'y', 'n', 'true', 'false', '1', '0', '✅', '❌'].includes(val);
+                    const val = (row[s.colIndex] || "").trim();
+                    if (['yes','no','y','n','true','false','1','0','✅','❌'].includes(val.toLowerCase())) return true;
+                    if (parseDateString(val)) return true;
+                    return false;
                 });
 
                 if (!hasDataInRow && itemLabel.length > 3) {
@@ -411,10 +269,23 @@
                 }
 
                 window.state.skills.push({ cat: currentCategory, skill: itemLabel });
+                
                 staffList.forEach(staff => {
-                    let val = (row[staff.colIndex] || "").trim().toLowerCase();
-                    let status = (['yes', 'y', 'true', '✅', '1', 'passed'].includes(val)) ? "Yes" : (['no', 'n', 'false', '❌', '0', 'failed'].includes(val) ? "No" : "N/A");
-                    window.state.staffStore[staff.name].competencies[itemLabel] = status;
+                    let val = (row[staff.colIndex] || "").trim();
+                    let valLower = val.toLowerCase();
+                    let status = "N/A";
+                    let dateAchieved = null;
+
+                    if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) {
+                        status = "No"; // Treat blanks and explicit "No"s as Incomplete
+                    } else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) {
+                        status = "Yes";
+                    } else if (val) {
+                        dateAchieved = parseDateString(val);
+                        if (dateAchieved) status = "Yes"; // If they have a date, they are competent!
+                    }
+
+                    window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved };
                 });
             }
 
@@ -439,27 +310,32 @@
                 staffByBand[s.band].push(s);
             });
 
-            Object.keys(staffByBand).sort((a,b) => b.localeCompare(a, undefined, {numeric:true})).forEach(band => {
-                const group = document.createElement('optgroup');
-                group.label = band;
+            Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
+                const group = document.createElement('optgroup'); group.label = band;
                 staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.name; opt.textContent = s.name;
-                    group.appendChild(opt);
+                    const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
                 });
                 select.appendChild(group);
             });
 
             window.state.categories.forEach(cat => {
-                const opt = document.createElement('option');
-                opt.value = cat; opt.textContent = cat;
-                catSelect.appendChild(opt);
+                const opt = document.createElement('option'); opt.value = cat; opt.textContent = cat; catSelect.appendChild(opt);
             });
 
             if (currentSelected && window.state.staffStore[currentSelected]) {
-                select.value = currentSelected;
-                updateDisplay();
+                select.value = currentSelected; updateDisplay();
             }
+        }
+
+        function getExpiryDate(achievedDate, categoryName) {
+            const defaultMonths = 12;
+            const catUpper = categoryName.toUpperCase();
+            // Look up rule, default to 12 if not found
+            const ruleMonths = VALIDITY_RULES[catUpper] || defaultMonths;
+            
+            const expiry = new Date(achievedDate);
+            expiry.setMonth(expiry.getMonth() + ruleMonths);
+            return expiry;
         }
 
         window.updateDisplay = function() {
@@ -478,38 +354,81 @@
             updateText('displayName', profile.name);
             updateText('displayBand', profile.band);
             
-            if (!tableBody) return;
             tableBody.innerHTML = '';
-            let countYes = 0, countNo = 0;
+            let countValid = 0, countWarning = 0, countIncomplete = 0;
             let lastCat = null;
+            const today = new Date();
+            const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
 
             window.state.skills.forEach(item => {
                 if (filter !== 'all' && item.cat !== filter) return;
-                const status = profile.competencies[item.skill] || "N/A";
-                if (status === "Yes") countYes++;
-                if (status === "No") countNo++;
+                const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
 
+                // Statistics & Validity Logic
+                let validityHtml = `<span class="text-slate-300 text-[10px] font-black uppercase tracking-widest">-</span>`;
+                
+                if (compData.status === "Yes") {
+                    if (compData.date) {
+                        const expiry = getExpiryDate(compData.date, item.cat);
+                        const isExpired = expiry < today;
+                        const isExpiringSoon = expiry <= sixtyDaysFromNow && !isExpired;
+                        
+                        let vClass = "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm";
+                        let vText = "VALID";
+                        
+                        if (isExpired) {
+                            vClass = "bg-red-50 text-red-700 border-red-200 shadow-sm"; vText = "EXPIRED";
+                            countWarning++;
+                        } else if (isExpiringSoon) {
+                            vClass = "bg-amber-50 text-amber-700 border-amber-300 shadow-sm"; vText = "EXPIRING SOON";
+                            countWarning++;
+                        } else {
+                            countValid++;
+                        }
+
+                        validityHtml = `
+                            <div class="flex flex-col items-center justify-center gap-1.5">
+                                <span class="inline-block px-3 py-1 rounded-md text-[9px] font-black border tracking-widest ${vClass}">${vText}</span>
+                                <span class="text-[10px] text-slate-500 font-bold tracking-wide">Ends: ${expiry.toLocaleDateString('en-GB')}</span>
+                            </div>
+                        `;
+                    } else {
+                        // Legacy "Yes" without date
+                        validityHtml = `<span class="text-slate-400 text-[10px] uppercase font-bold tracking-widest">No Date Logged</span>`;
+                        countValid++;
+                    }
+                } else if (compData.status === "No") {
+                    countIncomplete++;
+                }
+
+                // Category Header
                 if (filter === 'all' && item.cat !== lastCat) {
                     const hRow = document.createElement('tr');
                     hRow.className = "category-row";
-                    hRow.innerHTML = `<td colspan="2" class="px-4 py-3 text-[10px] uppercase tracking-[0.2em] font-bold">${item.cat}</td>`;
+                    hRow.innerHTML = `<td colspan="3" class="px-5 py-3 text-[11px] uppercase tracking-[0.2em] font-black">${item.cat}</td>`;
                     tableBody.appendChild(hRow);
                     lastCat = item.cat;
                 }
 
+                // Status Pill
+                let statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-slate-50 text-slate-500 border-slate-200">N/A</span>`;
+                if (compData.status === "Yes") statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-emerald-100 text-emerald-800 border-emerald-300">YES</span>`;
+                if (compData.status === "No") statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-red-100 text-red-800 border-red-300">NO</span>`;
+
                 const row = document.createElement('tr');
-                let bCls = status === "Yes" ? "status-yes" : (status === "No" ? "status-no" : "status-na");
+                row.className = "hover:bg-slate-50 transition-colors";
                 row.innerHTML = `
-                    <td class="p-4 text-slate-700 text-sm font-medium border-b border-slate-50">${item.skill}</td>
-                    <td class="p-4 text-center border-b border-slate-50">
-                        <span class="inline-block w-24 px-3 py-1.5 rounded-lg text-[11px] font-black border ${bCls}">${status.toUpperCase()}</span>
-                    </td>`;
+                    <td class="p-5 text-slate-700 text-sm font-semibold border-b border-slate-100 w-1/2">${item.skill}</td>
+                    <td class="p-5 text-center border-b border-slate-100 w-32">${statusHtml}</td>
+                    <td class="p-5 text-center border-b border-slate-100">${validityHtml}</td>
+                `;
                 tableBody.appendChild(row);
             });
 
             document.getElementById('statsSummary')?.classList.remove('hidden');
-            updateText('countAchieved', countYes);
-            updateText('countNo', countNo);
+            updateText('countValid', countValid);
+            updateText('countWarning', countWarning);
+            updateText('countIncomplete', countIncomplete);
         }
 
         window.filterStaffList = (e) => {
@@ -520,8 +439,7 @@
                     let has = false;
                     opt.querySelectorAll('option').forEach(c => {
                         const v = c.textContent.toLowerCase().includes(term);
-                        c.style.display = v ? '' : 'none';
-                        if (v) has = true;
+                        c.style.display = v ? '' : 'none'; if (v) has = true;
                     });
                     opt.style.display = has ? '' : 'none';
                 } else if (opt.value === "") opt.style.display = '';
@@ -533,22 +451,17 @@
             const r = [h];
             window.state.categories.forEach(c => {
                 r.push([c, "TRUE", ...new Array(h.length - 2).fill("")]);
-                window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("N/A")]));
+                window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("01/01/2026")]));
             });
-            const csv = Papa.unparse(r);
             const link = document.createElement("a");
-            link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+            link.href = URL.createObjectURL(new Blob([Papa.unparse(r)], { type: 'text/csv;charset=utf-8;' }));
             link.download = "competency_template.csv";
             link.click();
         };
-
     </script>
     <style>
-        .status-yes { background-color: #dcfce7; color: #166534; border-color: #bbf7d0; } 
-        .status-no { background-color: #fee2e2; color: #991b1b; border-color: #fecaca; }  
-        .status-na { background-color: #f1f5f9; color: #475569; border-color: #e2e8f0; }  
         .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #ffffff; }
-        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #334155; color: white; }
+        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #1e293b; color: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
         .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
         @keyframes spinner { to { transform: rotate(360deg); } }
         @media print { .no-print { display: none !important; } }
@@ -563,13 +476,8 @@
         <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in">
             <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
             <h2 class="text-2xl font-black mb-4">Secure Connection</h2>
-            <p class="text-slate-600 text-sm mb-6 leading-relaxed">
-                Paste your <strong>Firebase Config Object</strong> from the Console to initialize. 
-                This data is stored privately on your machine and is never shared publicly on GitHub.
-            </p>
-            <textarea id="configJsonInput" rows="8" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
-            <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700 transition-all">Save & Connect</button>
-            <p class="mt-4 text-[10px] text-slate-400 uppercase font-black tracking-widest leading-loose">Privacy Protected Initialization</p>
+            <textarea id="configJsonInput" rows="6" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
+            <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700">Save & Connect</button>
         </div>
     </div>
 
@@ -578,17 +486,16 @@
         <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center">
             <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
             <h1 class="text-2xl font-black mb-2 text-slate-900">Private Access</h1>
-            <p class="text-slate-500 text-sm mb-6">Enter access code.</p>
-            <input type="password" id="loginPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="CODE">
-            <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase tracking-wide">Incorrect Code</p>
-            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black transition-all">Unlock</button>
+            <input type="password" id="loginPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none" placeholder="CODE">
+            <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase">Incorrect Code</p>
+            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black">Unlock</button>
         </div>
     </div>
 
-    <div id="appContent" class="hidden max-w-5xl mx-auto px-4 py-8 pb-32">
+    <div id="appContent" class="hidden max-w-6xl mx-auto px-4 py-8 pb-32">
         <header class="mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
             <div class="flex items-center gap-5">
-                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                 </div>
                 <div>
@@ -597,23 +504,27 @@
                         <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Endoscopy Unit</span>
                         <div class="h-1 w-1 rounded-full bg-slate-300"></div>
                         <span id="authModeLabel" class="hidden"></span>
-                        <button onclick="logout()" class="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
+                        <button onclick="logout()" class="text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
                     </div>
                 </div>
             </div>
 
-            <div class="flex items-center gap-4 self-end xl:self-auto">
-                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all transform hover:-translate-y-0.5">
+            <div class="flex items-center gap-3 self-end xl:self-auto">
+                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-3 bg-slate-900 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all">
                     Update Data
                 </button>
-                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-3 fade-in">
-                    <div class="bg-white/50 backdrop-blur-sm border border-emerald-200/60 px-5 py-3 rounded-2xl shadow-sm text-center min-w-[110px] flex flex-col justify-center">
-                        <span class="text-[9px] uppercase font-black text-emerald-600 tracking-widest mb-1 leading-none">Competent</span>
-                        <span id="countAchieved" class="text-2xl font-black text-emerald-700">0</span>
+                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-2 fade-in">
+                    <div class="bg-white border border-emerald-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-emerald-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Valid</span><span id="countValid" class="text-xl font-black text-emerald-700">0</span></div>
                     </div>
-                    <div class="bg-white/50 backdrop-blur-sm border border-red-200/60 px-5 py-3 rounded-2xl shadow-sm text-center min-w-[130px] flex flex-col justify-center">
-                        <span class="text-[9px] uppercase font-black text-red-600 tracking-widest mb-1 leading-none">Needs Completion</span>
-                        <span id="countNo" class="text-2xl font-black text-red-700">0</span>
+                    <div class="bg-white border border-amber-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-amber-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Action Needed</span><span id="countWarning" class="text-xl font-black text-amber-600">0</span></div>
+                    </div>
+                    <div class="bg-white border border-red-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-red-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Incomplete</span><span id="countIncomplete" class="text-xl font-black text-red-600">0</span></div>
                     </div>
                 </div>
             </div>
@@ -622,7 +533,7 @@
         <div id="appStatusMsg" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
             <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
             <h2 class="text-xl font-black text-slate-900 mb-2">Notice</h2>
-            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto leading-relaxed">Connecting...</p>
+            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto">Connecting...</p>
         </div>
 
         <div id="setupPanel" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
@@ -639,8 +550,8 @@
         <div id="mainContent" class="hidden fade-in">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
                 <div class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row">
-                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-medium w-full sm:w-1/3" />
-                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-800 outline-none"><option value="">-- Select Name --</option></select>
+                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-semibold w-full sm:w-1/3" />
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 outline-none tracking-wide"><option value="">-- Select Staff Member --</option></select>
                 </div>
                 <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
                     <select id="categoryFilter" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-500 outline-none"><option value="all">Filter Categories</option></select>
@@ -652,10 +563,21 @@
                     <div class="bg-slate-900 text-white p-8">
                         <div class="flex justify-between items-start">
                             <div><h2 id="displayName" class="text-3xl font-black tracking-tight">Name</h2><span id="displayBand" class="inline-block bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase mt-2">Grade</span></div>
-                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all">PRINT</button>
+                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10">PRINT</button>
                         </div>
                     </div>
-                    <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead class="sticky-header shadow-sm"><tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest"><th class="p-6 border-b border-slate-100">Competency</th><th class="p-6 border-b border-slate-100 w-40 text-center">Status</th></tr></thead><tbody id="competencyTableBody"></tbody></table></div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky-header shadow-sm">
+                                <tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                    <th class="p-6 border-b border-slate-100">Competency Focus</th>
+                                    <th class="p-6 border-b border-slate-100 text-center w-32">Competent?</th>
+                                    <th class="p-6 border-b border-slate-100 text-center w-48">Validity Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="competencyTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -675,7 +597,7 @@
                         <div class="bg-white w-12 h-12 rounded-xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                         </div>
-                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase">Choose CSV File</span>
+                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase tracking-wide">Choose CSV File</span>
                     </div>
                 </label>
             </div>
