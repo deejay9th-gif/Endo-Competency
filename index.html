@@ -4,8 +4,178 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Staff Competency Tracker</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    
+    <style>
+        .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #ffffff; }
+        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #1e293b; color: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
+        @keyframes spinner { to { transform: rotate(360deg); } }
+        @media print { .no-print { display: none !important; } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-[#f8fafc] min-h-screen font-sans text-slate-900">
+
+    <!-- SETUP SCREEN -->
+    <div id="setupScreen" class="hidden fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4 text-center">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
+            <h2 class="text-2xl font-black mb-4">Secure Connection</h2>
+            <textarea id="configJsonInput" rows="6" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
+            <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700 transition-colors duration-200">Save & Connect</button>
+        </div>
+    </div>
+
+    <!-- LOGIN OVERLAY -->
+    <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
+        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
+            <h1 class="text-2xl font-black mb-6 text-slate-900">Unit Access</h1>
+            
+            <!-- Login Type Toggle -->
+            <div class="flex bg-slate-100 p-1.5 rounded-xl mb-6">
+                <button onclick="toggleLogin('staff')" id="tabStaff" class="flex-1 py-2 text-xs font-black rounded-lg bg-white shadow-sm text-slate-800 transition-all">Staff View</button>
+                <button onclick="toggleLogin('admin')" id="tabAdmin" class="flex-1 py-2 text-xs font-black rounded-lg text-slate-400 bg-transparent hover:text-slate-600 transition-all">Admin</button>
+            </div>
+
+            <!-- Staff View -->
+            <div id="staffLoginView">
+                <select id="loginNameSelect" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-center appearance-none cursor-pointer">
+                    <option value="">-- Loading Staff... --</option>
+                </select>
+                <input type="password" id="staffPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="YOUR PIN">
+            </div>
+
+            <!-- Admin View -->
+            <div id="adminLoginView" class="hidden">
+                <input type="password" id="adminPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="ADMIN CODE">
+            </div>
+
+            <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase tracking-wide">Incorrect PIN / Code</p>
+            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black transition-all">Unlock</button>
+        </div>
+    </div>
+
+    <div id="appContent" class="hidden max-w-6xl mx-auto px-4 py-8 pb-32">
+        <header class="mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
+            <div class="flex items-center gap-5">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Staff Competency</h1>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Endoscopy Unit</span>
+                        <div class="h-1 w-1 rounded-full bg-slate-300"></div>
+                        <span id="authModeLabel" class="hidden"></span>
+                        <button onclick="logout()" class="text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 self-end xl:self-auto">
+                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-3 bg-slate-900 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all">
+                    Update Data
+                </button>
+                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-2 fade-in">
+                    <div class="bg-white border border-emerald-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-emerald-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Valid</span><span id="countValid" class="text-xl font-black text-emerald-700">0</span></div>
+                    </div>
+                    <div class="bg-white border border-amber-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-amber-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Action Needed</span><span id="countWarning" class="text-xl font-black text-amber-600">0</span></div>
+                    </div>
+                    <div class="bg-white border border-red-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
+                        <div class="w-2 h-8 bg-red-400 rounded-full"></div>
+                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Incomplete</span><span id="countIncomplete" class="text-xl font-black text-red-600">0</span></div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <div id="appStatusMsg" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
+            <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
+            <h2 class="text-xl font-black text-slate-900 mb-2">Notice</h2>
+            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto">Connecting...</p>
+        </div>
+
+        <div id="setupPanel" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
+            <h2 class="text-2xl font-black text-slate-900 mb-2">Empty Database</h2>
+            <p class="text-slate-500 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
+            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black hover:bg-black transition-all shadow-xl">Open Admin Tool</button>
+        </div>
+
+        <div id="loader" class="flex flex-col items-center justify-center py-32">
+            <div class="loading-spinner w-10 h-10 border-4 border-slate-200 rounded-full mb-6"></div>
+            <p class="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Data...</p>
+        </div>
+
+        <div id="mainContent" class="hidden fade-in">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
+                <div id="staffSearchDiv" class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row">
+                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-semibold w-full sm:w-1/3" />
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 outline-none tracking-wide cursor-pointer"><option value="">-- Select Staff Member --</option></select>
+                </div>
+                <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                    <select id="categoryFilter" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-500 outline-none cursor-pointer"><option value="all">Filter Categories</option></select>
+                </div>
+            </div>
+
+            <div id="resultsContainer" class="hidden">
+                <div class="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
+                    <div class="bg-slate-900 text-white p-8">
+                        <div class="flex justify-between items-start">
+                            <div><h2 id="displayName" class="text-3xl font-black tracking-tight">Name</h2><span id="displayBand" class="inline-block bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase mt-2">Grade</span></div>
+                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10">PRINT</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="sticky-header shadow-sm">
+                                <tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                                    <th class="p-6 border-b border-slate-100">Competency Focus</th>
+                                    <th class="p-6 border-b border-slate-100 text-center w-32">Competent?</th>
+                                    <th class="p-6 border-b border-slate-100 text-center w-48">Validity Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="competencyTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer id="adminFooter" class="hidden mt-20 pt-10 border-t border-slate-200 no-print text-center">
+            <div id="adminPanel" class="hidden mt-10 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto fade-in">
+                <h3 class="text-lg font-black text-slate-900 mb-2">Update Database</h3>
+                <p class="text-sm text-slate-500 mb-6 leading-relaxed">Upload a CSV to update cloud records. Data updates instantly for all users.</p>
+                <div class="flex flex-wrap gap-2 mb-8 justify-center">
+                    <button onclick="downloadTemplate()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full font-black uppercase tracking-widest text-slate-600">Download Template</button>
+                    <button onclick="if(confirm('Clear database connection settings?')){safeStorage.remove('competency_firebase_config'); location.reload();}" class="text-[10px] bg-red-50 hover:bg-red-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-red-600">Reset Connection</button>
+                    <button onclick="generateShareLink()" class="text-[10px] bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-blue-600">Copy Staff Link</button>
+                </div>
+                <label class="block w-full cursor-pointer">
+                    <input type="file" accept=".csv" onchange="handleFileUpload(this)" class="hidden">
+                    <div class="bg-slate-50 border-2 border-dashed border-slate-200 p-12 rounded-3xl hover:bg-slate-100 hover:border-blue-400 transition-all text-center">
+                        <div class="bg-white w-12 h-12 rounded-xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                        </div>
+                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase tracking-wide">Choose CSV File</span>
+                    </div>
+                </label>
+            </div>
+        </footer>
+
+        <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 pt-8">
+            <p class="text-[10px] uppercase font-black tracking-widest text-slate-300 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit and Gemini</p>
+        </div>
+    </div>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -33,7 +203,6 @@
             "JETS WORKFORCE": 12
         };
 
-        // --- DATABASE CONFIGURATION ---
         let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" };
         let appId = 'my-staff-tracker-v1';
 
@@ -122,11 +291,9 @@
 
         const updateText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
 
-        // --- SECURITY ---
         const ADMIN_PASSCODE = "Iamn9thawk"; 
-        const STAFF_PASSCODE = "EndoWPH"; 
 
-        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null };
+        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null };
 
         async function initAuth() {
             try {
@@ -134,24 +301,62 @@
                 else await signInAnonymously(auth);
 
                 const savedSession = safeStorage.get('competency_access_session');
-                if (savedSession) window.validatePasscode(savedSession, true);
+                if (savedSession) {
+                    try {
+                        const parsed = JSON.parse(savedSession);
+                        if (parsed.type === 'admin') window.validatePasscode('admin', parsed.pin, null, true);
+                    } catch(e) {}
+                }
             } catch (err) { console.error("Auth Error:", err); }
         };
 
-        window.validatePasscode = function(input, isAuto = false) {
+        window.validatePasscode = function(type, input, name = null, isAuto = false) {
             const errorMsg = document.getElementById('loginError');
-            const loginInput = document.getElementById('loginPassInput');
-            if (input === ADMIN_PASSCODE) {
-                window.state.accessLevel = 'admin'; unlockApp(); safeStorage.set('competency_access_session', input);
-            } else if (input === STAFF_PASSCODE) {
-                window.state.accessLevel = 'staff'; unlockApp(); safeStorage.set('competency_access_session', input);
-            } else if (!isAuto) {
-                if (errorMsg) errorMsg.classList.remove('hidden');
-                if (loginInput) { loginInput.classList.add('border-red-500', 'ring-2'); setTimeout(() => loginInput.classList.remove('border-red-500', 'ring-2'), 2000); }
+            
+            if (type === 'admin' && input === ADMIN_PASSCODE) {
+                window.state.accessLevel = 'admin'; window.state.currentUser = null;
+                safeStorage.set('competency_access_session', JSON.stringify({type: 'admin', pin: input}));
+                unlockApp();
+            } else if (type === 'staff' && name) {
+                const profile = window.state.staffStore[name];
+                // Check if PIN matches
+                if (profile && profile.pin === input && input !== "") {
+                    window.state.accessLevel = 'staff'; window.state.currentUser = name;
+                    safeStorage.set('competency_access_session', JSON.stringify({type: 'staff', name: name, pin: input}));
+                    unlockApp();
+                } else { showError(type, isAuto); }
+            } else { showError(type, isAuto); }
+
+            function showError(t, auto) {
+                if (!auto) {
+                    if (errorMsg) errorMsg.classList.remove('hidden');
+                    const inputEl = document.getElementById(t === 'admin' ? 'adminPassInput' : 'staffPassInput');
+                    if (inputEl) { inputEl.classList.add('border-red-500', 'ring-2'); setTimeout(() => inputEl.classList.remove('border-red-500', 'ring-2'), 2000); }
+                } else { safeStorage.remove('competency_access_session'); }
             }
         };
 
-        window.attemptLogin = () => window.validatePasscode(document.getElementById('loginPassInput').value.trim());
+        window.attemptLogin = () => {
+            const isAdmin = !document.getElementById('adminLoginView').classList.contains('hidden');
+            if (isAdmin) window.validatePasscode('admin', document.getElementById('adminPassInput').value.trim());
+            else window.validatePasscode('staff', document.getElementById('staffPassInput').value.trim(), document.getElementById('loginNameSelect').value);
+        };
+        
+        window.toggleLogin = (mode) => {
+            const staffView = document.getElementById('staffLoginView'); const adminView = document.getElementById('adminLoginView');
+            const tabStaff = document.getElementById('tabStaff'); const tabAdmin = document.getElementById('tabAdmin');
+            
+            if (mode === 'staff') {
+                staffView.classList.remove('hidden'); adminView.classList.add('hidden');
+                tabStaff.classList.replace('text-slate-400', 'text-slate-800'); tabStaff.classList.replace('bg-transparent', 'bg-white'); tabStaff.classList.add('shadow-sm');
+                tabAdmin.classList.replace('text-slate-800', 'text-slate-400'); tabAdmin.classList.replace('bg-white', 'bg-transparent'); tabAdmin.classList.remove('shadow-sm');
+            } else {
+                staffView.classList.add('hidden'); adminView.classList.remove('hidden');
+                tabAdmin.classList.replace('text-slate-400', 'text-slate-800'); tabAdmin.classList.replace('bg-transparent', 'bg-white'); tabAdmin.classList.add('shadow-sm');
+                tabStaff.classList.replace('text-slate-800', 'text-slate-400'); tabStaff.classList.replace('bg-white', 'bg-transparent'); tabStaff.classList.remove('shadow-sm');
+            }
+        };
+
         window.logout = () => { safeStorage.remove('competency_access_session'); location.reload(); };
 
         function unlockApp() {
@@ -159,14 +364,28 @@
             document.getElementById('setupScreen')?.classList.add('hidden');
             document.getElementById('appContent')?.classList.remove('hidden');
             
+            const staffSearchDiv = document.getElementById('staffSearchDiv');
+            const staffSelect = document.getElementById('staffSelect');
+
             if (window.state.accessLevel === 'admin') {
                 document.getElementById('adminFooter')?.classList.remove('hidden');
                 document.getElementById('headerUploadBtn')?.classList.remove('hidden');
+                if (staffSearchDiv) staffSearchDiv.classList.remove('hidden'); // Show search for Admin
+                if (staffSelect) staffSelect.disabled = false;
+                
                 const lbl = document.getElementById('authModeLabel');
                 if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "ADMIN MODE"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200"; }
             } else {
+                // Privacy lock: Staff can only view their own profile
+                if (staffSearchDiv) staffSearchDiv.classList.add('hidden'); // Hide search from Staff
+                if (staffSelect) {
+                    staffSelect.value = window.state.currentUser; // Force lock to their name
+                    staffSelect.disabled = true;
+                }
+                updateDisplay();
+
                 const lbl = document.getElementById('authModeLabel');
-                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "STAFF VIEW"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200"; }
+                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "STAFF: " + window.state.currentUser; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200"; }
             }
         }
 
@@ -220,7 +439,7 @@
             // Check for UK Date format: DD/MM/YYYY or DD-MM-YYYY
             const ukMatch = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
             if (ukMatch) return new Date(ukMatch[3], ukMatch[2] - 1, ukMatch[1]);
-            // Fallback to JS standard Date parsing (handles "Jan 1, 2026")
+            // Fallback to JS standard Date parsing
             const d = new Date(val);
             if (!isNaN(d.getTime())) return d;
             return null;
@@ -245,7 +464,8 @@
                 if (!rawName) continue;
                 if (exclusionKeywords.some(kw => rawName.toLowerCase().includes(kw))) { lastBand = rawName; continue; }
                 staffList.push({ name: rawName, colIndex: j, band: lastBand });
-                window.state.staffStore[rawName] = { name: rawName, band: lastBand, competencies: {} };
+                // Default PIN is 1234 if no PIN row exists in the spreadsheet
+                window.state.staffStore[rawName] = { name: rawName, band: lastBand, pin: "1234", competencies: {} };
             }
 
             let currentCategory = "General";
@@ -253,6 +473,15 @@
                 const row = rows[i];
                 const itemLabel = (row[0] || "").trim();
                 if (!itemLabel) continue;
+
+                // Handle PIN row extraction
+                if (itemLabel.toUpperCase() === "PIN" || itemLabel.toUpperCase() === "PASSCODE") {
+                    staffList.forEach(staff => {
+                        const pinVal = (row[staff.colIndex] || "").trim();
+                        if (pinVal) window.state.staffStore[staff.name].pin = pinVal;
+                    });
+                    continue; // Skip processing this row as a competency
+                }
 
                 // Detect category headers vs competencies
                 const hasDataInRow = staffList.some(s => {
@@ -276,8 +505,9 @@
                     let status = "N/A";
                     let dateAchieved = null;
 
+                    // Treat blanks and explicit "No"s as Incomplete (Red flag)
                     if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) {
-                        status = "No"; // Treat blanks and explicit "No"s as Incomplete
+                        status = "No"; 
                     } else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) {
                         status = "Yes";
                     } else if (val) {
@@ -294,15 +524,27 @@
             document.getElementById('setupPanel')?.classList.add('hidden');
             document.getElementById('appStatusMsg')?.classList.add('hidden');
             document.getElementById('mainContent')?.classList.remove('hidden');
+
+            // Process auto-login for staff *after* data is loaded and parsed
+            const savedSession = safeStorage.get('competency_access_session');
+            if (savedSession) {
+                try {
+                    const session = JSON.parse(savedSession);
+                    if (session.type === 'staff') window.validatePasscode('staff', session.pin, session.name, true);
+                } catch(e) {}
+            }
         }
 
         function populateSelectors() {
             const select = document.getElementById('staffSelect');
             const catSelect = document.getElementById('categoryFilter');
+            const loginSelect = document.getElementById('loginNameSelect');
+            
             if (!select || !catSelect) return;
             const currentSelected = select.value;
             select.innerHTML = '<option value="">-- Select Name --</option>';
             catSelect.innerHTML = '<option value="all">All Competencies</option>';
+            if (loginSelect) loginSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
 
             const staffByBand = {};
             Object.values(window.state.staffStore).forEach(s => {
@@ -310,12 +552,17 @@
                 staffByBand[s.band].push(s);
             });
 
+            // Sort bands Highest to Lowest using localeCompare with numeric options
             Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
                 const group = document.createElement('optgroup'); group.label = band;
+                const loginGroup = document.createElement('optgroup'); loginGroup.label = band;
+                
                 staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
                     const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
+                    const lOpt = document.createElement('option'); lOpt.value = s.name; lOpt.textContent = s.name; loginGroup.appendChild(lOpt);
                 });
                 select.appendChild(group);
+                if (loginSelect) loginSelect.appendChild(loginGroup);
             });
 
             window.state.categories.forEach(cat => {
@@ -449,6 +696,10 @@
         window.downloadTemplate = () => {
             const h = ["Competency/Category", "Category Heading (Optional)", ...Object.keys(window.state.staffStore)];
             const r = [h];
+            
+            // Add PIN row example to the template
+            r.push(["PIN", "Personal Access Code", ...Object.keys(window.state.staffStore).map(() => "1234")]);
+
             window.state.categories.forEach(c => {
                 r.push([c, "TRUE", ...new Array(h.length - 2).fill("")]);
                 window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("01/01/2026")]));
@@ -459,153 +710,5 @@
             link.click();
         };
     </script>
-    <style>
-        .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #ffffff; }
-        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #1e293b; color: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
-        .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
-        @keyframes spinner { to { transform: rotate(360deg); } }
-        @media print { .no-print { display: none !important; } }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body class="bg-[#f8fafc] min-h-screen font-sans text-slate-900">
-
-    <!-- SETUP SCREEN -->
-    <div id="setupScreen" class="hidden fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4 text-center">
-        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in">
-            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
-            <h2 class="text-2xl font-black mb-4">Secure Connection</h2>
-            <textarea id="configJsonInput" rows="6" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
-            <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700">Save & Connect</button>
-        </div>
-    </div>
-
-    <!-- LOGIN OVERLAY -->
-    <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
-        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center">
-            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
-            <h1 class="text-2xl font-black mb-2 text-slate-900">Private Access</h1>
-            <input type="password" id="loginPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none" placeholder="CODE">
-            <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase">Incorrect Code</p>
-            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black">Unlock</button>
-        </div>
-    </div>
-
-    <div id="appContent" class="hidden max-w-6xl mx-auto px-4 py-8 pb-32">
-        <header class="mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
-            <div class="flex items-center gap-5">
-                <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
-                </div>
-                <div>
-                    <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Staff Competency</h1>
-                    <div class="flex items-center gap-3 mt-1">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Endoscopy Unit</span>
-                        <div class="h-1 w-1 rounded-full bg-slate-300"></div>
-                        <span id="authModeLabel" class="hidden"></span>
-                        <button onclick="logout()" class="text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-3 self-end xl:self-auto">
-                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-3 bg-slate-900 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all">
-                    Update Data
-                </button>
-                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-2 fade-in">
-                    <div class="bg-white border border-emerald-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-emerald-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Valid</span><span id="countValid" class="text-xl font-black text-emerald-700">0</span></div>
-                    </div>
-                    <div class="bg-white border border-amber-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-amber-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Action Needed</span><span id="countWarning" class="text-xl font-black text-amber-600">0</span></div>
-                    </div>
-                    <div class="bg-white border border-red-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-red-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Incomplete</span><span id="countIncomplete" class="text-xl font-black text-red-600">0</span></div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <div id="appStatusMsg" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
-            <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
-            <h2 class="text-xl font-black text-slate-900 mb-2">Notice</h2>
-            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto">Connecting...</p>
-        </div>
-
-        <div id="setupPanel" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
-            <h2 class="text-2xl font-black text-slate-900 mb-2">Empty Database</h2>
-            <p class="text-slate-500 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
-            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black hover:bg-black transition-all shadow-xl">Open Admin Tool</button>
-        </div>
-
-        <div id="loader" class="flex flex-col items-center justify-center py-32">
-            <div class="loading-spinner w-10 h-10 border-4 border-slate-200 rounded-full mb-6"></div>
-            <p class="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Data...</p>
-        </div>
-
-        <div id="mainContent" class="hidden fade-in">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
-                <div class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row">
-                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-semibold w-full sm:w-1/3" />
-                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 outline-none tracking-wide"><option value="">-- Select Staff Member --</option></select>
-                </div>
-                <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-                    <select id="categoryFilter" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-500 outline-none"><option value="all">Filter Categories</option></select>
-                </div>
-            </div>
-
-            <div id="resultsContainer" class="hidden">
-                <div class="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
-                    <div class="bg-slate-900 text-white p-8">
-                        <div class="flex justify-between items-start">
-                            <div><h2 id="displayName" class="text-3xl font-black tracking-tight">Name</h2><span id="displayBand" class="inline-block bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase mt-2">Grade</span></div>
-                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10">PRINT</button>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="sticky-header shadow-sm">
-                                <tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                    <th class="p-6 border-b border-slate-100">Competency Focus</th>
-                                    <th class="p-6 border-b border-slate-100 text-center w-32">Competent?</th>
-                                    <th class="p-6 border-b border-slate-100 text-center w-48">Validity Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="competencyTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <footer id="adminFooter" class="hidden mt-20 pt-10 border-t border-slate-200 no-print text-center">
-            <div id="adminPanel" class="hidden mt-10 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto fade-in">
-                <h3 class="text-lg font-black text-slate-900 mb-2">Update Database</h3>
-                <p class="text-sm text-slate-500 mb-6 leading-relaxed">Upload a CSV to update cloud records. Data updates instantly for all users.</p>
-                <div class="flex flex-wrap gap-2 mb-8 justify-center">
-                    <button onclick="downloadTemplate()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full font-black uppercase tracking-widest text-slate-600">Download Template</button>
-                    <button onclick="if(confirm('Clear database connection settings?')){safeStorage.remove('competency_firebase_config'); location.reload();}" class="text-[10px] bg-red-50 hover:bg-red-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-red-600">Reset Connection</button>
-                    <button onclick="generateShareLink()" class="text-[10px] bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-blue-600">Copy Staff Link</button>
-                </div>
-                <label class="block w-full cursor-pointer">
-                    <input type="file" accept=".csv" onchange="handleFileUpload(this)" class="hidden">
-                    <div class="bg-slate-50 border-2 border-dashed border-slate-200 p-12 rounded-3xl hover:bg-slate-100 hover:border-blue-400 transition-all text-center">
-                        <div class="bg-white w-12 h-12 rounded-xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                        </div>
-                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase tracking-wide">Choose CSV File</span>
-                    </div>
-                </label>
-            </div>
-        </footer>
-
-        <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 pt-8">
-            <p class="text-[10px] uppercase font-black tracking-widest text-slate-300 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit Wexham Park Hospital and Gemini</p>
-        </div>
-    </div>
 </body>
 </html>
