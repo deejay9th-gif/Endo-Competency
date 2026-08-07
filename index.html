@@ -3,74 +3,102 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Staff Competency Tracker</title>
+    <title>Staff Competency Tracker - KPI Dashboard</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
     
     <style>
-        .sticky-header { position: sticky; top: 0; z-index: 20; background-color: #ffffff; }
-        .category-row { position: sticky; top: 48px; z-index: 10; background-color: #1e293b; color: white; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
         .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
         @keyframes spinner { to { transform: rotate(360deg); } }
-        @media print { .no-print { display: none !important; } }
-        .fade-in { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @media print { .no-print { display: none !important; } .print-break { page-break-inside: avoid; } }
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Custom Scrollbar for inner cards */
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 9999px; }
+        .dark .custom-scroll::-webkit-scrollbar-thumb { background-color: #475569; }
+
+        /* SVG Donut Chart Animation */
+        .donut-ring { transition: stroke-dasharray 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
+
+        /* Tooltip Container */
+        #globalTooltip { transition: opacity 0.15s ease-in-out; pointer-events: none; z-index: 9999; }
     </style>
 </head>
-<body class="bg-[#f8fafc] min-h-screen font-sans text-slate-900">
+<body class="bg-[#f8fafc] dark:bg-slate-900 min-h-screen font-sans text-slate-900 dark:text-slate-200 transition-colors duration-300">
+
+    <!-- Global Floating Tooltip -->
+    <div id="globalTooltip" class="fixed opacity-0 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold px-3 py-2 rounded-lg shadow-xl max-w-[200px] pointer-events-none transform -translate-x-1/2 -translate-y-[120%]"></div>
+
+    <!-- Custom Modal Overlay -->
+    <div id="customModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm fade-in">
+        <div class="bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl p-8 max-w-sm w-full text-center border dark:border-slate-700">
+            <div id="modalIcon" class="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 bg-blue-50 dark:bg-blue-900/30">ℹ️</div>
+            <h2 id="modalTitle" class="text-xl font-black mb-2 text-slate-900 dark:text-white">Notice</h2>
+            <p id="modalMessage" class="text-slate-500 dark:text-slate-400 text-sm mb-8 leading-relaxed">Message goes here.</p>
+            <div id="modalActions" class="flex gap-3 justify-center">
+                <button id="modalBtnCancel" class="hidden flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">Cancel</button>
+                <button id="modalBtnConfirm" class="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg hover:bg-blue-700 transition-colors">OK</button>
+            </div>
+        </div>
+    </div>
 
     <!-- SETUP SCREEN -->
-    <div id="setupScreen" class="hidden fixed inset-0 z-[60] bg-slate-100 flex items-center justify-center p-4 text-center">
-        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in">
-            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
-            <h2 class="text-2xl font-black mb-4">Secure Connection</h2>
-            <textarea id="configJsonInput" rows="6" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
+    <div id="setupScreen" class="hidden fixed inset-0 z-[60] bg-slate-100 dark:bg-slate-900 flex items-center justify-center p-4 text-center">
+        <div class="bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl p-8 max-w-lg w-full fade-in border dark:border-slate-700">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-3xl">⚙️</div></div>
+            <h2 class="text-2xl font-black mb-4 dark:text-white">Secure Connection</h2>
+            <textarea id="configJsonInput" rows="6" class="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl font-mono text-xs mb-6 outline-none focus:ring-2 focus:ring-blue-500 dark:text-slate-300 dark:placeholder-slate-500" placeholder='{ "apiKey": "...", "projectId": "...", ... }'></textarea>
             <button onclick="saveProjectConfig()" class="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-blue-700 transition-colors duration-200">Save & Connect</button>
         </div>
     </div>
 
     <!-- LOGIN OVERLAY -->
     <div id="loginOverlay" class="fixed inset-0 z-50 bg-slate-900 flex items-center justify-center p-4">
-        <div class="bg-white rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center">
-            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
-            <h1 class="text-2xl font-black mb-6 text-slate-900">Unit Access</h1>
+        <div class="bg-white dark:bg-slate-800 rounded-[2rem] shadow-2xl p-8 max-w-sm w-full fade-in text-center border dark:border-slate-700">
+            <div class="mb-6 flex justify-center"><div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-3xl">🔒</div></div>
+            <h1 class="text-2xl font-black mb-6 text-slate-900 dark:text-white">Unit Access</h1>
             
-            <!-- Login Type Toggle -->
-            <div class="flex bg-slate-100 p-1.5 rounded-xl mb-6">
-                <button onclick="toggleLogin('staff')" id="tabStaff" class="flex-1 py-2 text-xs font-black rounded-lg bg-white shadow-sm text-slate-800 transition-all">Staff View</button>
-                <button onclick="toggleLogin('admin')" id="tabAdmin" class="flex-1 py-2 text-xs font-black rounded-lg text-slate-400 bg-transparent hover:text-slate-600 transition-all">Admin</button>
+            <div class="flex bg-slate-100 dark:bg-slate-900 p-1.5 rounded-xl mb-6">
+                <button onclick="toggleLogin('staff')" id="tabStaff" class="flex-1 py-2 text-xs font-black rounded-lg bg-white dark:bg-slate-700 shadow-sm text-slate-800 dark:text-white transition-all">Staff View</button>
+                <button onclick="toggleLogin('admin')" id="tabAdmin" class="flex-1 py-2 text-xs font-black rounded-lg text-slate-400 dark:text-slate-500 bg-transparent hover:text-slate-600 dark:hover:text-slate-300 transition-all">Admin</button>
             </div>
 
-            <!-- Staff View -->
             <div id="staffLoginView">
-                <select id="loginNameSelect" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-center appearance-none cursor-pointer">
+                <select id="loginNameSelect" class="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl mb-4 font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-blue-500 transition-all text-center appearance-none cursor-pointer">
                     <option value="">-- Loading Staff... --</option>
                 </select>
-                <input type="password" id="staffPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="YOUR PIN">
+                <input type="password" id="staffPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all" placeholder="YOUR PIN">
             </div>
 
-            <!-- Admin View -->
             <div id="adminLoginView" class="hidden">
-                <input type="password" id="adminPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 transition-all" placeholder="ADMIN CODE">
+                <input type="password" id="adminPassInput" onkeypress="if(event.key==='Enter') attemptLogin()" class="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl mb-4 font-mono text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500 dark:text-white transition-all" placeholder="ADMIN CODE">
             </div>
 
             <p id="loginError" class="hidden text-red-500 text-xs font-bold mb-4 uppercase tracking-wide">Incorrect PIN / Code</p>
-            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 text-white font-black rounded-2xl shadow-lg hover:bg-black transition-all">Unlock</button>
+            <button onclick="attemptLogin()" class="w-full py-4 bg-slate-900 dark:bg-blue-600 text-white font-black rounded-2xl shadow-lg hover:bg-black dark:hover:bg-blue-700 transition-all">Unlock</button>
         </div>
     </div>
 
-    <div id="appContent" class="hidden max-w-6xl mx-auto px-4 py-8 pb-32">
-        <header class="mb-10 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
+    <div id="appContent" class="hidden max-w-[1400px] mx-auto px-4 sm:px-8 py-8 pb-32">
+        <header class="mb-8 flex flex-col xl:flex-row xl:items-center justify-between gap-6 no-print">
             <div class="flex items-center gap-5">
-                <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-200 flex items-center justify-center text-white transform -rotate-3">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-xl shadow-blue-200 dark:shadow-none flex items-center justify-center text-white transform -rotate-3">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
                 </div>
                 <div>
-                    <h1 class="text-3xl font-black text-slate-900 tracking-tighter">Staff Competency</h1>
+                    <h1 class="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">KPI Dashboard</h1>
                     <div class="flex items-center gap-3 mt-1">
                         <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Endoscopy Unit</span>
-                        <div class="h-1 w-1 rounded-full bg-slate-300"></div>
+                        <div class="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600"></div>
                         <span id="authModeLabel" class="hidden"></span>
                         <button onclick="logout()" class="text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors uppercase tracking-widest ml-1">Logout</button>
                     </div>
@@ -78,129 +106,346 @@
             </div>
 
             <div class="flex items-center gap-3 self-end xl:self-auto">
-                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-5 py-3 bg-slate-900 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black uppercase tracking-wider transition-all">
-                    Update Data
+                 <button onclick="toggleTheme()" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                    <svg id="themeIconSun" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                    <svg id="themeIconMoon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                 </button>
+                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-6 py-3.5 bg-slate-900 dark:bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black dark:hover:bg-blue-700 uppercase tracking-wider transition-all flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    Update Database
                 </button>
-                <div id="statsSummary" class="hidden flex flex-wrap justify-end gap-2 fade-in">
-                    <div class="bg-white border border-emerald-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-emerald-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Valid</span><span id="countValid" class="text-xl font-black text-emerald-700">0</span></div>
-                    </div>
-                    <div class="bg-white border border-amber-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-amber-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Action Needed</span><span id="countWarning" class="text-xl font-black text-amber-600">0</span></div>
-                    </div>
-                    <div class="bg-white border border-red-100 px-4 py-2 rounded-xl shadow-sm flex items-center gap-3 min-w-[130px]">
-                        <div class="w-2 h-8 bg-red-400 rounded-full"></div>
-                        <div><span class="block text-[9px] uppercase font-black text-slate-400 tracking-widest">Incomplete</span><span id="countIncomplete" class="text-xl font-black text-red-600">0</span></div>
-                    </div>
-                </div>
             </div>
         </header>
 
-        <div id="appStatusMsg" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
-            <div class="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
-            <h2 class="text-xl font-black text-slate-900 mb-2">Notice</h2>
-            <p id="statusText" class="text-slate-500 text-sm max-w-sm mx-auto">Connecting...</p>
+        <!-- Status & Loading -->
+        <div id="appStatusMsg" class="hidden bg-white dark:bg-slate-800 p-12 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 text-center fade-in">
+            <div class="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
+            <h2 class="text-xl font-black text-slate-900 dark:text-white mb-2">Notice</h2>
+            <p id="statusText" class="text-slate-500 dark:text-slate-400 text-sm max-w-sm mx-auto">Connecting...</p>
         </div>
 
-        <div id="setupPanel" class="hidden bg-white p-12 rounded-[2rem] shadow-xl border border-slate-100 text-center fade-in">
-            <h2 class="text-2xl font-black text-slate-900 mb-2">Empty Database</h2>
-            <p class="text-slate-500 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
-            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 text-white px-10 py-4 rounded-2xl font-black hover:bg-black transition-all shadow-xl">Open Admin Tool</button>
+        <div id="setupPanel" class="hidden bg-white dark:bg-slate-800 p-12 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 text-center fade-in">
+            <h2 class="text-2xl font-black text-slate-900 dark:text-white mb-2">Empty Database</h2>
+            <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
+            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 dark:bg-blue-600 text-white px-10 py-4 rounded-2xl font-black hover:bg-black dark:hover:bg-blue-700 transition-all shadow-xl">Open Admin Tool</button>
         </div>
 
-        <div id="loader" class="flex flex-col items-center justify-center py-32">
-            <div class="loading-spinner w-10 h-10 border-4 border-slate-200 rounded-full mb-6"></div>
-            <p class="text-slate-400 font-bold uppercase tracking-widest text-xs">Loading Data...</p>
+        <!-- Animated Skeleton Loader -->
+        <div id="loader" class="py-12 w-full max-w-5xl mx-auto flex flex-col gap-6 fade-in">
+            <div class="h-8 bg-slate-200 dark:bg-slate-700 rounded-lg w-1/4 animate-pulse mb-4"></div>
+            <div class="flex gap-6 animate-pulse flex-col md:flex-row">
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+            </div>
+            <div class="h-[400px] bg-slate-200 dark:bg-slate-700 rounded-[2rem] animate-pulse shadow-sm mt-4"></div>
         </div>
 
         <div id="mainContent" class="hidden fade-in">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 no-print">
-                <div id="staffSearchDiv" class="md:col-span-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100 flex flex-col sm:flex-row">
-                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="p-4 bg-transparent outline-none border-b sm:border-b-0 sm:border-r border-slate-100 text-sm font-semibold w-full sm:w-1/3" />
-                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 outline-none tracking-wide cursor-pointer"><option value="">-- Select Staff Member --</option></select>
-                </div>
-                <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-                    <select id="categoryFilter" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-bold text-slate-500 outline-none cursor-pointer"><option value="all">Filter Categories</option></select>
+            
+            <!-- Controls (Search/Filter) -->
+            <div class="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row mb-8 no-print max-w-3xl">
+                <div id="staffSearchDiv" class="flex-1 flex flex-col sm:flex-row border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </div>
+                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="pl-10 p-4 bg-transparent outline-none text-sm font-semibold w-full sm:w-1/2 border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 dark:text-white" />
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 dark:text-white outline-none tracking-wide cursor-pointer appearance-none"><option value="">-- Unit Overview --</option></select>
                 </div>
             </div>
 
-            <div id="resultsContainer" class="hidden">
-                <div class="bg-white rounded-[2rem] border border-slate-200 shadow-2xl overflow-hidden">
-                    <div class="bg-slate-900 text-white p-8">
-                        <div class="flex justify-between items-start">
-                            <div><h2 id="displayName" class="text-3xl font-black tracking-tight">Name</h2><span id="displayBand" class="inline-block bg-blue-600 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase mt-2">Grade</span></div>
-                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10">PRINT</button>
+            <!-- UNIT DASHBOARD -->
+            <div id="unitDashboard" class="hidden">
+                <div class="mb-6"><h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Unit Performance Overview</h2><p class="text-slate-500 dark:text-slate-400 text-sm">High-level compliance statistics across all staff.</p></div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <!-- Unit Total Compliance -->
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-6 relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-full opacity-50 pointer-events-none"></div>
+                        <div class="relative w-24 h-24">
+                            <svg viewBox="0 0 36 36" class="w-full h-full">
+                                <path class="text-slate-100 dark:text-slate-700" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                <path id="unitOverallDonut" class="text-blue-600 dark:text-blue-500 donut-ring" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center flex-col">
+                                <span id="unitOverallPercent" class="text-xl font-black text-slate-800 dark:text-white">0%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-1">Total Unit Compliance</h3>
+                            <p class="text-2xl font-black text-slate-800 dark:text-white" id="unitTotalStaff">0 Staff</p>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
+                    
+                    <!-- Unit Expiring Soon -->
+                    <div class="bg-amber-50 rounded-3xl p-6 shadow-sm border border-amber-100 flex flex-col justify-center relative overflow-hidden dark:bg-amber-900/20 dark:border-amber-900/50">
+                        <div class="absolute -right-4 -bottom-4 text-amber-200 opacity-30 dark:opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1 z-10 dark:text-amber-400">Expiring Soon</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitExpiringCount" class="text-4xl font-black text-amber-700 leading-none dark:text-amber-300">0</span>
+                            <span class="text-xs font-bold text-amber-600/80 mb-1 dark:text-amber-400/80">Competencies</span>
+                        </div>
+                    </div>
+
+                    <!-- Expired / Missing -->
+                    <div class="bg-red-50 rounded-3xl p-6 shadow-sm border border-red-100 flex flex-col justify-center relative overflow-hidden dark:bg-red-900/20 dark:border-red-900/50">
+                        <div class="absolute -right-4 -bottom-4 text-red-200 opacity-30 dark:opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        </div>
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-red-600 mb-1 z-10 dark:text-red-400">Expired / Missing</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitExpiredCount" class="text-4xl font-black text-red-700 leading-none dark:text-red-300">0</span>
+                            <span class="text-xs font-bold text-red-600/80 mb-1 dark:text-red-400/80">Competencies</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unit Historic Trend Chart (Admin Only) -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8 p-8 print-break transition-colors">
+                    <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Compliance Trend</h3>
+                    <div class="w-full h-72 relative">
+                        <canvas id="unitTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Unit Staff Breakdown Table -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
+                        <h3 class="text-white font-black tracking-wide text-lg">Staff Priority List</h3>
+                        <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Action Required</span>
+                    </div>
+                    <div class="overflow-x-auto max-h-[500px] custom-scroll">
                         <table class="w-full text-left border-collapse">
-                            <thead class="sticky-header shadow-sm">
-                                <tr class="bg-white text-slate-400 text-[10px] uppercase font-black tracking-widest">
-                                    <th class="p-6 border-b border-slate-100">Competency Focus</th>
-                                    <th class="p-6 border-b border-slate-100 text-center w-32">Competent?</th>
-                                    <th class="p-6 border-b border-slate-100 text-center w-48">Validity Status</th>
+                            <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800 shadow-sm z-10">
+                                <tr class="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-black tracking-widest">
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700">Staff Member</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Compliance</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Expiring Soon</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Action Needed</th>
                                 </tr>
                             </thead>
-                            <tbody id="competencyTableBody"></tbody>
+                            <tbody id="unitStaffTableBody"></tbody>
                         </table>
                     </div>
                 </div>
             </div>
+
+            <!-- STAFF DASHBOARD (Visible when a specific staff is selected) -->
+            <div id="staffDashboard" class="hidden">
+                
+                <!-- Staff Profile & Main KPI -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden mb-8 no-print">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-8 text-white relative">
+                        <div class="absolute top-0 right-0 p-8 opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-48 w-48 -mt-16 -mr-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                        </div>
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+                            <div>
+                                <h2 id="displayName" class="text-4xl font-black tracking-tight mb-2">Name</h2>
+                                <span id="displayBand" class="inline-block bg-blue-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">Grade</span>
+                            </div>
+                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10 shadow-sm backdrop-blur-sm flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                PRINT REPORT
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 bg-slate-50/50 dark:bg-slate-800/30">
+                        <!-- Overall Score Donut -->
+                        <div class="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                            <div class="relative w-20 h-20 flex-shrink-0">
+                                <svg viewBox="0 0 36 36" class="w-full h-full">
+                                    <path class="text-slate-100 dark:text-slate-700" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <path id="staffOverallDonut" class="text-blue-600 dark:text-blue-500 donut-ring" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center"><span id="staffOverallPercent" class="text-lg font-black text-slate-800 dark:text-white">0%</span></div>
+                            </div>
+                            <div>
+                                <span class="block text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Overall Status</span>
+                                <span id="staffOverallText" class="text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight block">Calculating...</span>
+                            </div>
+                        </div>
+
+                        <!-- Valid KPI -->
+                        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 p-5 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-3 opacity-20 text-emerald-600 dark:text-emerald-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg></div>
+                            <span class="block text-[10px] uppercase font-black text-emerald-600/80 dark:text-emerald-400 tracking-widest mb-1 relative z-10">Valid & Up-to-date</span>
+                            <div class="relative z-10 flex items-baseline gap-1"><span id="staffCountValid" class="text-3xl font-black text-emerald-700 dark:text-emerald-300">0</span><span class="text-xs font-bold text-emerald-600 dark:text-emerald-500">skills</span></div>
+                        </div>
+
+                        <!-- Expiring KPI -->
+                        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 p-5 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-3 opacity-20 text-amber-500 dark:text-amber-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" /></svg></div>
+                            <span class="block text-[10px] uppercase font-black text-amber-600/80 dark:text-amber-400 tracking-widest mb-1 relative z-10">Expiring (< 60 Days)</span>
+                            <div class="relative z-10 flex items-baseline gap-1"><span id="staffCountExpiring" class="text-3xl font-black text-amber-600 dark:text-amber-300">0</span><span class="text-xs font-bold text-amber-500 dark:text-amber-500">skills</span></div>
+                        </div>
+
+                        <!-- Expired/Missing KPI -->
+                        <div class="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 p-5 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-3 opacity-20 text-red-500 dark:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg></div>
+                            <span class="block text-[10px] uppercase font-black text-red-600/80 dark:text-red-400 tracking-widest mb-1 relative z-10">Action Required</span>
+                            <div class="relative z-10 flex items-baseline gap-1"><span id="staffCountAction" class="text-3xl font-black text-red-600 dark:text-red-300">0</span><span class="text-xs font-bold text-red-500 dark:text-red-500">skills</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Breakdown Grid -->
+                <div class="mb-6"><h3 class="text-xl font-black text-slate-800 dark:text-white">Competency Breakdown</h3></div>
+                
+                <!-- Category Performance Overview Chart -->
+                <div id="staffCategoryChart" class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-6 mb-8 hidden print-break">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
+                        <h4 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide">Category Performance</h4>
+                        <div class="flex gap-3 text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                            <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm"></div> Valid</span>
+                            <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm"></div> Expiring</span>
+                            <span class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div> Action</span>
+                        </div>
+                    </div>
+                    <div id="staffCategoryChartContent" class="flex flex-col gap-4"></div>
+                </div>
+
+                <div id="categoryGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
+                    <!-- Cards will be injected here -->
+                </div>
+            </div>
         </div>
 
-        <footer id="adminFooter" class="hidden mt-20 pt-10 border-t border-slate-200 no-print text-center">
-            <div id="adminPanel" class="hidden mt-10 bg-white p-10 rounded-[2.5rem] border border-slate-200 shadow-2xl max-w-lg mx-auto fade-in">
-                <h3 class="text-lg font-black text-slate-900 mb-2">Update Database</h3>
-                <p class="text-sm text-slate-500 mb-6 leading-relaxed">Upload a CSV to update cloud records. Data updates instantly for all users.</p>
-                <div class="flex flex-wrap gap-2 mb-8 justify-center">
-                    <button onclick="downloadTemplate()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-full font-black uppercase tracking-widest text-slate-600">Download Template</button>
-                    <button onclick="if(confirm('Clear database connection settings?')){safeStorage.remove('competency_firebase_config'); location.reload();}" class="text-[10px] bg-red-50 hover:bg-red-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-red-600">Reset Connection</button>
-                    <button onclick="generateShareLink()" class="text-[10px] bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-full font-black uppercase tracking-widest text-blue-600">Copy Staff Link</button>
+        <footer id="adminFooter" class="hidden mt-10 pt-10 border-t border-slate-200 dark:border-slate-800 no-print text-center">
+            <div id="adminPanel" class="hidden bg-white dark:bg-slate-800 p-10 rounded-[2.5rem] border border-slate-200 dark:border-slate-700 shadow-2xl max-w-lg mx-auto fade-in">
+                <h3 class="text-xl font-black text-slate-900 dark:text-white mb-2">Database Management</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400 mb-8 leading-relaxed">Upload a CSV to update cloud records. Data updates instantly for all users.</p>
+                
+                <div class="flex flex-wrap gap-3 mb-8 justify-center">
+                    <button onclick="downloadTemplate()" class="text-xs bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 px-5 py-2.5 rounded-xl font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 transition-colors shadow-sm">Download Template</button>
+                    <button onclick="confirmResetConnection()" class="text-xs bg-red-50 dark:bg-red-900/30 hover:bg-red-100 dark:hover:bg-red-900/50 px-5 py-2.5 rounded-xl font-black uppercase tracking-wider text-red-600 dark:text-red-400 transition-colors shadow-sm">Reset Connection</button>
+                    <button onclick="generateShareLink()" class="text-xs bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 px-5 py-2.5 rounded-xl font-black uppercase tracking-wider text-blue-700 dark:text-blue-400 transition-colors shadow-sm w-full sm:w-auto">Copy Staff Link</button>
                 </div>
-                <label class="block w-full cursor-pointer">
+                
+                <label class="block w-full cursor-pointer group">
                     <input type="file" accept=".csv" onchange="handleFileUpload(this)" class="hidden">
-                    <div class="bg-slate-50 border-2 border-dashed border-slate-200 p-12 rounded-3xl hover:bg-slate-100 hover:border-blue-400 transition-all text-center">
-                        <div class="bg-white w-12 h-12 rounded-xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                    <div class="bg-slate-50 dark:bg-slate-900 border-2 border-dashed border-slate-300 dark:border-slate-700 p-12 rounded-3xl group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 group-hover:border-blue-400 transition-all text-center">
+                        <div class="bg-white dark:bg-slate-800 w-14 h-14 rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4 text-slate-400 group-hover:text-blue-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                         </div>
-                        <span id="uploadLabel" class="text-sm font-black text-slate-600 block uppercase tracking-wide">Choose CSV File</span>
+                        <span id="uploadLabel" class="text-sm font-black text-slate-600 dark:text-slate-300 block uppercase tracking-wide group-hover:text-blue-700 dark:group-hover:text-blue-400">Choose CSV File</span>
                     </div>
                 </label>
             </div>
         </footer>
 
-        <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 pt-8">
-            <p class="text-[10px] uppercase font-black tracking-widest text-slate-300 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit and Gemini</p>
+        <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 dark:border-slate-800 pt-8">
+            <p class="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit and Gemini</p>
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Helper for safe storage
+        // Must be hoisted to the top to prevent initialization errors
         const safeStorage = {
             set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} },
             get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
             remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
         };
 
-        // --- VALIDITY RULES (Months) ---
+        window.toggleTheme = () => {
+            const isDark = document.documentElement.classList.toggle('dark');
+            safeStorage.set('competency_theme', isDark ? 'dark' : 'light');
+            document.getElementById('themeIconSun').classList.toggle('hidden', !isDark);
+            document.getElementById('themeIconMoon').classList.toggle('hidden', isDark);
+            if(window.unitChart) {
+                window.unitChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b';
+                window.unitChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b';
+                window.unitChart.options.scales.y.grid.color = isDark ? '#334155' : '#f1f5f9';
+                window.unitChart.options.plugins.tooltip.backgroundColor = isDark ? '#1e293b' : '#fff';
+                window.unitChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#0f172a';
+                window.unitChart.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#475569';
+                window.unitChart.update();
+            }
+        };
+        if(safeStorage.get('competency_theme') === 'dark') window.toggleTheme();
+
+        window.showTooltip = (e, text) => {
+            const tt = document.getElementById('globalTooltip');
+            tt.innerHTML = text;
+            tt.classList.remove('opacity-0');
+            tt.style.left = `${e.clientX}px`;
+            tt.style.top = `${e.clientY}px`;
+        };
+        window.hideTooltip = () => document.getElementById('globalTooltip').classList.add('opacity-0');
+
+        function animateValue(id, end, duration, suffix = "") {
+            const obj = document.getElementById(id);
+            if (!obj) return;
+            const start = parseInt(obj.textContent) || 0;
+            if(start === end) { obj.textContent = end + suffix; return; }
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                obj.textContent = Math.floor(progress * (end - start) + start) + suffix;
+                if (progress < 1) window.requestAnimationFrame(step);
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        let modalCallback = null;
+        window.showModal = function(title, message, type = 'info', onConfirm = null) {
+            const modal = document.getElementById('customModal');
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            
+            const icon = document.getElementById('modalIcon');
+            const btnCancel = document.getElementById('modalBtnCancel');
+            const btnConfirm = document.getElementById('modalBtnConfirm');
+
+            icon.className = "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6";
+            btnConfirm.className = "flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-colors";
+
+            if (type === 'error') {
+                icon.classList.add('bg-red-50', 'dark:bg-red-900/30'); icon.textContent = '❌';
+                btnConfirm.classList.add('bg-red-600', 'hover:bg-red-700');
+            } else if (type === 'success') {
+                icon.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30'); icon.textContent = '✅';
+                btnConfirm.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+            } else if (type === 'confirm') {
+                icon.classList.add('bg-amber-50', 'dark:bg-amber-900/30'); icon.textContent = '⚠️';
+                btnConfirm.classList.add('bg-amber-600', 'hover:bg-amber-700');
+            } else {
+                icon.classList.add('bg-blue-50', 'dark:bg-blue-900/30'); icon.textContent = 'ℹ️';
+                btnConfirm.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            }
+
+            if (type === 'confirm') {
+                btnCancel.classList.remove('hidden');
+                modalCallback = onConfirm;
+            } else {
+                btnCancel.classList.add('hidden');
+                modalCallback = null;
+            }
+
+            modal.classList.remove('hidden');
+        };
+
+        document.getElementById('modalBtnCancel').addEventListener('click', () => {
+            document.getElementById('customModal').classList.add('hidden');
+        });
+
+        document.getElementById('modalBtnConfirm').addEventListener('click', () => {
+            document.getElementById('customModal').classList.add('hidden');
+            if (modalCallback) modalCallback();
+        });
+
         const VALIDITY_RULES = {
-            "RECOVERY": 12,
-            "GENERAL": 12,
-            "ENDOSCOPY ROOM": 12,
-            "CONSENTS AND DISCHARGING": 12,
-            "ROOM COMPETENCIES": 12,
-            "UPPER GI PROCEDURES": 6,
-            "ASSISTING WITH EMERGENCY GI BLEEDS": 6,
-            "LOWER GI PROCEDURES": 6,
-            "ERCP": 4,
-            "DECONTAMINATION": 6,
-            "JETS WORKFORCE": 12
+            "RECOVERY": 12, "GENERAL": 12, "ENDOSCOPY ROOM": 12, "CONSENTS AND DISCHARGING": 12,
+            "ROOM COMPETENCIES": 12, "UPPER GI PROCEDURES": 6, "ASSISTING WITH EMERGENCY GI BLEEDS": 6,
+            "LOWER GI PROCEDURES": 6, "ERCP": 4, "DECONTAMINATION": 6, "JETS WORKFORCE": 12
         };
 
         let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" };
@@ -221,6 +466,7 @@
                     if (parsed.apiKey && parsed.projectId) {
                         safeStorage.set('competency_firebase_config', decoded);
                         firebaseConfig = parsed;
+                        window.history.replaceState({}, document.title, window.location.pathname);
                     }
                 } catch(e) { console.error("Invalid Magic Link"); }
             }
@@ -233,7 +479,9 @@
         }
 
         let auth, db;
-        
+        const ADMIN_PASSCODE = "Iamn9thawk"; 
+        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [] };
+
         if (firebaseConfig.apiKey && firebaseConfig.projectId) {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -251,10 +499,8 @@
 
         function showSetupScreen() {
             window.addEventListener('DOMContentLoaded', () => {
-                const loginOverlay = document.getElementById('loginOverlay');
-                const setupScreen = document.getElementById('setupScreen');
-                if (loginOverlay) loginOverlay.classList.add('hidden');
-                if (setupScreen) setupScreen.classList.remove('hidden');
+                document.getElementById('loginOverlay')?.classList.add('hidden');
+                document.getElementById('setupScreen')?.classList.remove('hidden');
             });
         }
 
@@ -268,32 +514,42 @@
                 const parsed = new Function("return " + jsonString)();
                 if (!parsed.apiKey || !parsed.projectId) throw new Error("Missing credentials");
                 safeStorage.set('competency_firebase_config', JSON.stringify(parsed));
-                alert("Configuration saved! Connecting...");
-                location.reload();
-            } catch (e) { alert("Format Error: " + e.message); }
+                
+                showModal("Success", "Configuration saved! Reloading...", "success", () => location.reload());
+                setTimeout(() => location.reload(), 1500);
+            } catch (e) { showModal("Format Error", e.message, "error"); }
         };
 
         window.generateShareLink = function() {
             let currentConfigStr = safeStorage.get('competency_firebase_config') || JSON.stringify(firebaseConfig);
-            if (!currentConfigStr || !firebaseConfig.apiKey) return alert("No configuration found.");
+            if (!currentConfigStr || !firebaseConfig.apiKey) return showModal("Error", "No configuration found.", "error");
             try {
                 const encoded = btoa(currentConfigStr);
                 const shareUrl = `${window.location.origin}${window.location.pathname}?cfg=${encoded}`;
-                const tempInput = document.createElement("input");
+                
+                const tempInput = document.createElement("textarea");
                 tempInput.value = shareUrl;
                 document.body.appendChild(tempInput);
                 tempInput.select();
-                document.execCommand("copy");
+                try {
+                    document.execCommand("copy");
+                    showModal("Link Copied!", "Magic Link copied to clipboard. Send this to Staff to grant access.", "success");
+                } catch (err) {
+                    showModal("Copy Failed", "Please copy this link manually: " + shareUrl, "info");
+                }
                 document.body.removeChild(tempInput);
-                alert("✨ Magic Link Copied! Send this link to Staff to allow access.");
-            } catch(e) { alert("Could not generate link."); }
+                
+            } catch(e) { showModal("Error", "Could not generate link.", "error"); }
+        };
+
+        window.confirmResetConnection = function() {
+            showModal("Reset Connection?", "This will clear database settings and return you to the setup screen. Are you sure?", "confirm", () => {
+                safeStorage.remove('competency_firebase_config'); 
+                location.reload();
+            });
         };
 
         const updateText = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-
-        const ADMIN_PASSCODE = "Iamn9thawk"; 
-
-        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null };
 
         async function initAuth() {
             try {
@@ -319,7 +575,6 @@
                 unlockApp();
             } else if (type === 'staff' && name) {
                 const profile = window.state.staffStore[name];
-                // Check if PIN matches
                 if (profile && profile.pin === input && input !== "") {
                     window.state.accessLevel = 'staff'; window.state.currentUser = name;
                     safeStorage.set('competency_access_session', JSON.stringify({type: 'staff', name: name, pin: input}));
@@ -348,12 +603,16 @@
             
             if (mode === 'staff') {
                 staffView.classList.remove('hidden'); adminView.classList.add('hidden');
-                tabStaff.classList.replace('text-slate-400', 'text-slate-800'); tabStaff.classList.replace('bg-transparent', 'bg-white'); tabStaff.classList.add('shadow-sm');
-                tabAdmin.classList.replace('text-slate-800', 'text-slate-400'); tabAdmin.classList.replace('bg-white', 'bg-transparent'); tabAdmin.classList.remove('shadow-sm');
+                tabStaff.classList.replace('text-slate-400', 'text-slate-800'); tabStaff.classList.replace('dark:text-slate-500', 'dark:text-white');
+                tabStaff.classList.replace('bg-transparent', 'bg-white'); tabStaff.classList.replace('dark:bg-transparent', 'dark:bg-slate-700'); tabStaff.classList.add('shadow-sm');
+                tabAdmin.classList.replace('text-slate-800', 'text-slate-400'); tabAdmin.classList.replace('dark:text-white', 'dark:text-slate-500'); 
+                tabAdmin.classList.replace('bg-white', 'bg-transparent'); tabAdmin.classList.replace('dark:bg-slate-700', 'dark:bg-transparent'); tabAdmin.classList.remove('shadow-sm');
             } else {
                 staffView.classList.add('hidden'); adminView.classList.remove('hidden');
-                tabAdmin.classList.replace('text-slate-400', 'text-slate-800'); tabAdmin.classList.replace('bg-transparent', 'bg-white'); tabAdmin.classList.add('shadow-sm');
-                tabStaff.classList.replace('text-slate-800', 'text-slate-400'); tabStaff.classList.replace('bg-white', 'bg-transparent'); tabStaff.classList.remove('shadow-sm');
+                tabAdmin.classList.replace('text-slate-400', 'text-slate-800'); tabAdmin.classList.replace('dark:text-slate-500', 'dark:text-white');
+                tabAdmin.classList.replace('bg-transparent', 'bg-white'); tabAdmin.classList.replace('dark:bg-transparent', 'dark:bg-slate-700'); tabAdmin.classList.add('shadow-sm');
+                tabStaff.classList.replace('text-slate-800', 'text-slate-400'); tabStaff.classList.replace('dark:text-white', 'dark:text-slate-500'); 
+                tabStaff.classList.replace('bg-white', 'bg-transparent'); tabStaff.classList.replace('dark:bg-slate-700', 'dark:bg-transparent'); tabStaff.classList.remove('shadow-sm');
             }
         };
 
@@ -370,27 +629,37 @@
             if (window.state.accessLevel === 'admin') {
                 document.getElementById('adminFooter')?.classList.remove('hidden');
                 document.getElementById('headerUploadBtn')?.classList.remove('hidden');
-                if (staffSearchDiv) staffSearchDiv.classList.remove('hidden'); // Show search for Admin
-                if (staffSelect) staffSelect.disabled = false;
+                if (staffSearchDiv) staffSearchDiv.classList.remove('hidden'); 
+                if (staffSelect) {
+                    staffSelect.disabled = false;
+                    staffSelect.value = ""; 
+                }
                 
                 const lbl = document.getElementById('authModeLabel');
-                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "ADMIN MODE"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200"; }
+                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "ADMIN MODE"; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400"; }
             } else {
-                // Privacy lock: Staff can only view their own profile
-                if (staffSearchDiv) staffSearchDiv.classList.add('hidden'); // Hide search from Staff
+                if (staffSearchDiv) staffSearchDiv.classList.add('hidden');
                 if (staffSelect) {
-                    staffSelect.value = window.state.currentUser; // Force lock to their name
+                    staffSelect.value = window.state.currentUser; 
                     staffSelect.disabled = true;
                 }
-                updateDisplay();
-
+                
                 const lbl = document.getElementById('authModeLabel');
-                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "STAFF: " + window.state.currentUser; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200"; }
+                if (lbl) { lbl.classList.remove('hidden'); lbl.textContent = "STAFF: " + window.state.currentUser; lbl.className = "text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border text-slate-600 bg-slate-50 border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"; }
             }
+            updateDisplay();
         }
 
         function setupRealtimeSync() {
             if (window.state.unsubscribe) window.state.unsubscribe();
+            
+            getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trends', 'unit_history')).then(docSnap => {
+                if(docSnap.exists()) {
+                    window.state.trends = docSnap.data().history || [];
+                    if(window.state.accessLevel === 'admin' && !document.getElementById('unitDashboard').classList.contains('hidden')) drawUnitTrendChart();
+                }
+            }).catch(e => console.log("Trend fetch note:", e));
+
             window.state.unsubscribe = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest'), (docSnap) => {
                 if (docSnap.exists() && docSnap.data().csvText) {
                     parseCsv(docSnap.data().csvText);
@@ -415,16 +684,34 @@
         };
 
         window.saveToCloud = async (csvText) => {
-            if (!window.state.user) return alert("Still connecting...");
+            if (!window.state.user) return showModal("Wait", "Still connecting to database...", "info");
             const uploadLabel = document.getElementById('uploadLabel');
             const originalLabel = uploadLabel ? uploadLabel.innerHTML : 'Choose CSV File';
-            if (uploadLabel) uploadLabel.innerHTML = '<span class="text-blue-600 font-bold animate-pulse">UPLOADING...</span>';
+            if (uploadLabel) uploadLabel.innerHTML = '<span class="text-blue-600 dark:text-blue-400 font-bold animate-pulse">UPLOADING...</span>';
 
             try {
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest'), { csvText: csvText, updatedAt: Date.now() });
-                alert("Database Updated Successfully!");
+                
+                let sValid = 0, sTotal = 0;
+                Object.values(window.state.staffStore).forEach(profile => {
+                    window.state.skills.forEach(item => {
+                        const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+                        sTotal++;
+                        if (compData.status === "Yes") {
+                            if (compData.date && getExpiryDate(compData.date, item.cat) >= new Date()) sValid++;
+                            else if (!compData.date) sValid++;
+                        }
+                    });
+                });
+                const unitPct = sTotal > 0 ? Math.round((sValid/sTotal)*100) : 0;
+                
+                const newTrend = { date: Date.now(), pct: unitPct };
+                const updatedTrends = [...window.state.trends, newTrend].slice(-15);
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trends', 'unit_history'), { history: updatedTrends });
+                
+                showModal("Success", "Database Updated Successfully! Changes are live.", "success");
                 document.getElementById('adminPanel')?.classList.add('hidden');
-            } catch (err) { alert("Upload error: " + err.message); }
+            } catch (err) { showModal("Upload Error", err.message, "error"); }
             finally { if (uploadLabel) uploadLabel.innerHTML = originalLabel; }
         };
 
@@ -432,91 +719,238 @@
             Papa.parse(csvText, { header: false, skipEmptyLines: 'greedy', complete: (res) => processSheetData(res.data) });
         }
 
-        // --- DATE PARSING HELPER ---
         function parseDateString(val) {
             if (!val) return null;
             val = val.trim();
-            // Check for UK Date format: DD/MM/YYYY or DD-MM-YYYY
             const ukMatch = val.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
             if (ukMatch) return new Date(ukMatch[3], ukMatch[2] - 1, ukMatch[1]);
-            // Fallback to JS standard Date parsing
             const d = new Date(val);
             if (!isNaN(d.getTime())) return d;
             return null;
         }
 
+        function normalizeBand(str) {
+            if (!str) return null;
+            let s = str.trim();
+            const lower = s.toLowerCase();
+            
+            // Hardcoded precision for absolute certainty
+            if (lower === 'band 7' || lower === 'b7' || lower === '7') return 'Band 7';
+            if (lower === 'band 6' || lower === 'b6' || lower === '6') return 'Band 6';
+            if (lower === 'band 5' || lower === 'b5' || lower === '5') return 'Band 5';
+            if (lower === 'band 4' || lower === 'b4' || lower === '4') return 'Band 4';
+            if (lower === 'band 3' || lower === 'b3' || lower === '3') return 'Band 3';
+            if (lower === 'band 8' || lower === 'b8' || lower === '8') return 'Band 8';
+            if (lower === 'band 2' || lower === 'b2' || lower === '2') return 'Band 2';
+
+            const m = s.match(/^(?:band|grade|b)?\s*[\-]?\s*(\d+[a-c]?)$/i);
+            if (m) return "Band " + m[1];
+            if (lower.includes("charge nurse") || lower.includes("sister") || lower.includes("manager")) return s;
+            return s;
+        }
+
+        function isPureExclusionHeader(str) {
+            if (!str) return false;
+            const lower = str.trim().toLowerCase();
+            const statsKeywords = ['status', 'total', 'count', 'sum', '%', 'band', 'grade', 'pin', 'passcode'];
+            if (statsKeywords.includes(lower)) return true;
+            if (/^(?:band|grade|b)\s*[\-]?\s*\d+[a-c]?$/i.test(lower)) return true;
+            const standaloneTitles = ['charge nurse', 'junior charge nurse', 'senior charge nurse', 'sister', 'senior sister', 'matron', 'manager', 'lead nurse'];
+            if (standaloneTitles.includes(lower)) return true;
+            return false;
+        }
+
         function processSheetData(rows) {
             window.state.categories = []; window.state.skills = []; window.state.staffStore = {};
+            if (rows.length < 1) return;
 
-            let headerIndex = -1;
-            for (let i = 0; i < Math.min(rows.length, 25); i++) {
-                if (rows[i].slice(2).filter(c => c && c.trim() !== "").length > 3) { headerIndex = i; break; }
-            }
-            if (headerIndex === -1) return;
+            // Universal Orientation Detector
+            let isRowBased = false;
+            let headerRowIndex = -1;
+            let nameCol = -1, bandCol = -1, pinCol = -1;
 
-            const headerRow = rows[headerIndex]; 
-            const staffList = [];
-            const exclusionKeywords = ['band', 'grade', 'status', 'total', 'count', 'sum', '%'];
-            let lastBand = "N/A";
-
-            for (let j = 2; j < headerRow.length; j++) {
-                const rawName = (headerRow[j] || "").trim();
-                if (!rawName) continue;
-                if (exclusionKeywords.some(kw => rawName.toLowerCase().includes(kw))) { lastBand = rawName; continue; }
-                staffList.push({ name: rawName, colIndex: j, band: lastBand });
-                // Default PIN is 1234 if no PIN row exists in the spreadsheet
-                window.state.staffStore[rawName] = { name: rawName, band: lastBand, pin: "1234", competencies: {} };
-            }
-
-            let currentCategory = "General";
-            for (let i = headerIndex + 1; i < rows.length; i++) {
-                const row = rows[i];
-                const itemLabel = (row[0] || "").trim();
-                if (!itemLabel) continue;
-
-                // Handle PIN row extraction
-                if (itemLabel.toUpperCase() === "PIN" || itemLabel.toUpperCase() === "PASSCODE") {
-                    staffList.forEach(staff => {
-                        const pinVal = (row[staff.colIndex] || "").trim();
-                        if (pinVal) window.state.staffStore[staff.name].pin = pinVal;
-                    });
-                    continue; // Skip processing this row as a competency
-                }
-
-                // Detect category headers vs competencies
-                const hasDataInRow = staffList.some(s => {
-                    const val = (row[s.colIndex] || "").trim();
-                    if (['yes','no','y','n','true','false','1','0','✅','❌'].includes(val.toLowerCase())) return true;
-                    if (parseDateString(val)) return true;
-                    return false;
-                });
-
-                if (!hasDataInRow && itemLabel.length > 3) {
-                    currentCategory = itemLabel;
-                    if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
-                    continue;
-                }
-
-                window.state.skills.push({ cat: currentCategory, skill: itemLabel });
+            for (let i = 0; i < Math.min(rows.length, 5); i++) {
+                const r = rows[i].map(c => (c || "").trim().toLowerCase());
+                nameCol = r.findIndex(c => c === 'name' || c === 'staff name' || c === 'staff' || c === 'employee');
+                bandCol = r.findIndex(c => c === 'band' || c === 'grade' || c === 'role' || c === 'position' || c === 'title' || c === 'job title');
+                pinCol = r.findIndex(c => c === 'pin' || c === 'passcode' || c === 'password');
                 
-                staffList.forEach(staff => {
-                    let val = (row[staff.colIndex] || "").trim();
-                    let valLower = val.toLowerCase();
-                    let status = "N/A";
-                    let dateAchieved = null;
+                if (nameCol !== -1) {
+                    isRowBased = true;
+                    headerRowIndex = i;
+                    break;
+                }
+            }
 
-                    // Treat blanks and explicit "No"s as Incomplete (Red flag)
-                    if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) {
-                        status = "No"; 
-                    } else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) {
-                        status = "Yes";
-                    } else if (val) {
-                        dateAchieved = parseDateString(val);
-                        if (dateAchieved) status = "Yes"; // If they have a date, they are competent!
+            if (isRowBased) {
+                // ==========================================
+                // PARSE: STAFF IN ROWS (Standard HR Export)
+                // ==========================================
+                const headerRow = rows[headerRowIndex];
+                const competencyCols = [];
+                
+                for (let j = 0; j < headerRow.length; j++) {
+                    if (j === nameCol || j === bandCol || j === pinCol) continue;
+                    const colName = (headerRow[j] || "").trim();
+                    if (!colName || colName.toLowerCase() === 'category heading' || colName.toLowerCase() === 'category') continue;
+                    
+                    let cat = "General";
+                    let skill = colName;
+                    
+                    if (colName.includes(":")) {
+                        const parts = colName.split(":");
+                        cat = parts[0].trim();
+                        skill = parts.slice(1).join(":").trim();
+                    }
+                    
+                    if (!window.state.categories.includes(cat)) window.state.categories.push(cat);
+                    competencyCols.push({ cat, skill, colIndex: j });
+                    window.state.skills.push({ cat, skill });
+                }
+
+                for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    let rawName = (row[nameCol] || "").trim();
+                    if (!rawName) continue;
+                    
+                    let bandVal = bandCol !== -1 ? (row[bandCol] || "").trim() : "";
+                    let pinVal = pinCol !== -1 ? (row[pinCol] || "").trim() : "1234";
+
+                    let cleanName = rawName;
+                    let extractedBand = normalizeBand(bandVal);
+
+                    if (!extractedBand || extractedBand === "N/A") {
+                        const match = cleanName.match(/^(.+?)(?:\s*[\(\[\-\/,\n\|–—:]\s*|\s+-\s+|\s+)(Band\s*\d+[a-z]?|B\d+|Grade\s*\d+[a-z]?|.*Charge Nurse.*|.*Sister.*|.*Manager.*|.*Matron.*)\s*[\)\]]?$/i);
+                        if (match) {
+                            cleanName = match[1].trim();
+                            extractedBand = normalizeBand(match[2].trim());
+                        }
                     }
 
-                    window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved };
-                });
+                    if (!window.state.staffStore[cleanName]) {
+                        window.state.staffStore[cleanName] = { name: cleanName, band: extractedBand || "N/A", pin: pinVal || "1234", competencies: {} };
+                    }
+                    
+                    competencyCols.forEach(comp => {
+                        let val = (row[comp.colIndex] || "").trim();
+                        let valLower = val.toLowerCase();
+                        let status = "N/A";
+                        let dateAchieved = null;
+
+                        if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) status = "No"; 
+                        else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) status = "Yes";
+                        else if (val) {
+                            dateAchieved = parseDateString(val);
+                            if (dateAchieved) status = "Yes";
+                        }
+                        window.state.staffStore[cleanName].competencies[comp.skill] = { status, date: dateAchieved };
+                    });
+                }
+            } else {
+                // ==========================================
+                // PARSE: STAFF IN COLUMNS (Template Format)
+                // ==========================================
+                let headerIndex = -1;
+                for (let i = 0; i < Math.min(rows.length, 25); i++) {
+                    if (rows[i].slice(1).filter(c => c && c.trim() !== "").length >= 2) { 
+                        headerIndex = i; break; 
+                    }
+                }
+                if (headerIndex === -1) return;
+
+                const headerRow = rows[headerIndex]; 
+                const staffList = [];
+                let lastBand = "N/A";
+
+                for (let j = 1; j < headerRow.length; j++) { 
+                    let rawName = (headerRow[j] || "").trim();
+                    if (!rawName || rawName.toLowerCase() === 'category heading (optional)' || rawName.toLowerCase() === 'category heading' || rawName.toLowerCase() === 'true') continue;
+
+                    let extractedBand = null;
+                    let cleanName = rawName;
+                    
+                    const bandMatch = rawName.match(/^(.+?)(?:\s*[\(\[\-\/,\n\|–—:]\s*|\s+-\s+|\s+)(Band\s*\d+[a-z]?|B\d+|Grade\s*\d+[a-z]?|.*Charge Nurse.*|.*Sister.*|.*Manager.*|.*Matron.*)\s*[\)\]]?$/i);
+                    if (bandMatch) {
+                        cleanName = bandMatch[1].trim();
+                        extractedBand = normalizeBand(bandMatch[2].trim());
+                    }
+
+                    if (isPureExclusionHeader(rawName) || isPureExclusionHeader(cleanName)) {
+                        let pureBand = normalizeBand(extractedBand || rawName);
+                        if (pureBand && pureBand.toLowerCase() !== 'band' && pureBand.toLowerCase() !== 'grade') {
+                            lastBand = pureBand;
+                        }
+                        continue; 
+                    }
+
+                    const finalBand = extractedBand || lastBand;
+                    staffList.push({ name: cleanName, colIndex: j, band: finalBand });
+                    window.state.staffStore[cleanName] = { name: cleanName, band: finalBand, pin: "1234", competencies: {} };
+                }
+
+                let currentCategory = "General";
+                for (let i = headerIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const labelA = (row[0] || "").trim();
+                    const labelB = (row[1] || "").trim();
+                    const itemLabel = labelA || labelB; 
+                    
+                    if (!itemLabel) continue;
+
+                    if (itemLabel.toUpperCase() === "PIN" || itemLabel.toUpperCase() === "PASSCODE" || itemLabel.toUpperCase() === "PASSWORD") {
+                        staffList.forEach(staff => {
+                            const pinVal = (row[staff.colIndex] || "").trim();
+                            if (pinVal) window.state.staffStore[staff.name].pin = pinVal;
+                        });
+                        continue; 
+                    }
+
+                    if (["BAND", "GRADE", "ROLE", "POSITION", "TITLE"].includes(itemLabel.toUpperCase())) {
+                        staffList.forEach(staff => {
+                            const bandVal = (row[staff.colIndex] || "").trim();
+                            if (bandVal) {
+                                const norm = normalizeBand(bandVal);
+                                staff.band = norm;
+                                if (window.state.staffStore[staff.name]) {
+                                    window.state.staffStore[staff.name].band = norm;
+                                }
+                            }
+                        });
+                        continue;
+                    }
+
+                    const hasDataInRow = staffList.some(s => {
+                        const val = (row[s.colIndex] || "").trim();
+                        if (['yes','no','y','n','true','false','1','0','✅','❌'].includes(val.toLowerCase())) return true;
+                        if (parseDateString(val)) return true;
+                        return false;
+                    });
+
+                    if (!hasDataInRow && itemLabel.length > 2) {
+                        currentCategory = itemLabel;
+                        if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                        continue;
+                    }
+
+                    window.state.skills.push({ cat: currentCategory, skill: itemLabel });
+                    
+                    staffList.forEach(staff => {
+                        let val = (row[staff.colIndex] || "").trim();
+                        let valLower = val.toLowerCase();
+                        let status = "N/A";
+                        let dateAchieved = null;
+
+                        if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) {
+                            status = "No"; 
+                        } else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) {
+                            status = "Yes";
+                        } else if (val) {
+                            dateAchieved = parseDateString(val);
+                            if (dateAchieved) status = "Yes";
+                        }
+                        window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved };
+                    });
+                }
             }
 
             populateSelectors();
@@ -525,7 +959,6 @@
             document.getElementById('appStatusMsg')?.classList.add('hidden');
             document.getElementById('mainContent')?.classList.remove('hidden');
 
-            // Process auto-login for staff *after* data is loaded and parsed
             const savedSession = safeStorage.get('competency_access_session');
             if (savedSession) {
                 try {
@@ -537,14 +970,9 @@
 
         function populateSelectors() {
             const select = document.getElementById('staffSelect');
-            const catSelect = document.getElementById('categoryFilter');
-            const loginSelect = document.getElementById('loginNameSelect');
-            
-            if (!select || !catSelect) return;
+            if (!select) return;
             const currentSelected = select.value;
-            select.innerHTML = '<option value="">-- Select Name --</option>';
-            catSelect.innerHTML = '<option value="all">All Competencies</option>';
-            if (loginSelect) loginSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
+            select.innerHTML = '<option value="">-- Unit Overview --</option>';
 
             const staffByBand = {};
             Object.values(window.state.staffStore).forEach(s => {
@@ -552,22 +980,26 @@
                 staffByBand[s.band].push(s);
             });
 
-            // Sort bands Highest to Lowest using localeCompare with numeric options
             Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
                 const group = document.createElement('optgroup'); group.label = band;
-                const loginGroup = document.createElement('optgroup'); loginGroup.label = band;
                 
                 staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
                     const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
-                    const lOpt = document.createElement('option'); lOpt.value = s.name; lOpt.textContent = s.name; loginGroup.appendChild(lOpt);
                 });
                 select.appendChild(group);
-                if (loginSelect) loginSelect.appendChild(loginGroup);
             });
 
-            window.state.categories.forEach(cat => {
-                const opt = document.createElement('option'); opt.value = cat; opt.textContent = cat; catSelect.appendChild(opt);
-            });
+            const loginSelect = document.getElementById('loginNameSelect');
+            if(loginSelect) {
+                loginSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
+                Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
+                    const group = document.createElement('optgroup'); group.label = band;
+                    staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
+                        const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
+                    });
+                    loginSelect.appendChild(group);
+                });
+            }
 
             if (currentSelected && window.state.staffStore[currentSelected]) {
                 select.value = currentSelected; updateDisplay();
@@ -577,7 +1009,6 @@
         function getExpiryDate(achievedDate, categoryName) {
             const defaultMonths = 12;
             const catUpper = categoryName.toUpperCase();
-            // Look up rule, default to 12 if not found
             const ruleMonths = VALIDITY_RULES[catUpper] || defaultMonths;
             
             const expiry = new Date(achievedDate);
@@ -587,95 +1018,337 @@
 
         window.updateDisplay = function() {
             const name = document.getElementById('staffSelect').value;
-            const filter = document.getElementById('categoryFilter').value;
-            const tableBody = document.getElementById('competencyTableBody');
+            const staffDash = document.getElementById('staffDashboard');
+            const unitDash = document.getElementById('unitDashboard');
             
             if (!name) {
-                document.getElementById('resultsContainer')?.classList.add('hidden');
-                document.getElementById('statsSummary')?.classList.add('hidden');
+                if (staffDash) staffDash.classList.add('hidden');
+                if (unitDash) unitDash.classList.remove('hidden');
+                if (window.state.accessLevel === 'admin') renderUnitDashboard();
                 return;
             }
 
+            if (unitDash) unitDash.classList.add('hidden');
+            if (staffDash) staffDash.classList.remove('hidden');
+
             const profile = window.state.staffStore[name];
-            document.getElementById('resultsContainer')?.classList.remove('hidden');
+            if(!profile) return;
+
             updateText('displayName', profile.name);
             updateText('displayBand', profile.band);
             
-            tableBody.innerHTML = '';
-            let countValid = 0, countWarning = 0, countIncomplete = 0;
-            let lastCat = null;
+            let countValid = 0, countExpiring = 0, countAction = 0, totalApplicable = 0;
             const today = new Date();
             const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
 
-            window.state.skills.forEach(item => {
-                if (filter !== 'all' && item.cat !== filter) return;
-                const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+            const categoryData = {};
+            window.state.categories.forEach(cat => categoryData[cat] = { total: 0, valid: 0, skills: [] });
 
-                // Statistics & Validity Logic
-                let validityHtml = `<span class="text-slate-300 text-[10px] font-black uppercase tracking-widest">-</span>`;
-                
+            window.state.skills.forEach(item => {
+                if(!categoryData[item.cat]) categoryData[item.cat] = { total: 0, valid: 0, skills: [] };
+                categoryData[item.cat].total++;
+                totalApplicable++;
+
+                const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+                let statusObj = { name: item.skill, status: 'missing', date: null };
+
                 if (compData.status === "Yes") {
                     if (compData.date) {
                         const expiry = getExpiryDate(compData.date, item.cat);
-                        const isExpired = expiry < today;
-                        const isExpiringSoon = expiry <= sixtyDaysFromNow && !isExpired;
-                        
-                        let vClass = "bg-emerald-50 text-emerald-700 border-emerald-200 shadow-sm";
-                        let vText = "VALID";
-                        
-                        if (isExpired) {
-                            vClass = "bg-red-50 text-red-700 border-red-200 shadow-sm"; vText = "EXPIRED";
-                            countWarning++;
-                        } else if (isExpiringSoon) {
-                            vClass = "bg-amber-50 text-amber-700 border-amber-300 shadow-sm"; vText = "EXPIRING SOON";
-                            countWarning++;
+                        statusObj.date = expiry;
+                        if (expiry < today) {
+                            statusObj.status = 'expired';
+                            countAction++;
+                        } else if (expiry <= sixtyDaysFromNow) {
+                            statusObj.status = 'expiring';
+                            countExpiring++;
+                            categoryData[item.cat].valid++;
                         } else {
+                            statusObj.status = 'valid';
                             countValid++;
+                            categoryData[item.cat].valid++;
                         }
-
-                        validityHtml = `
-                            <div class="flex flex-col items-center justify-center gap-1.5">
-                                <span class="inline-block px-3 py-1 rounded-md text-[9px] font-black border tracking-widest ${vClass}">${vText}</span>
-                                <span class="text-[10px] text-slate-500 font-bold tracking-wide">Ends: ${expiry.toLocaleDateString('en-GB')}</span>
-                            </div>
-                        `;
                     } else {
-                        // Legacy "Yes" without date
-                        validityHtml = `<span class="text-slate-400 text-[10px] uppercase font-bold tracking-widest">No Date Logged</span>`;
+                        statusObj.status = 'valid';
                         countValid++;
+                        categoryData[item.cat].valid++;
                     }
-                } else if (compData.status === "No") {
-                    countIncomplete++;
+                } else {
+                    countAction++;
                 }
-
-                // Category Header
-                if (filter === 'all' && item.cat !== lastCat) {
-                    const hRow = document.createElement('tr');
-                    hRow.className = "category-row";
-                    hRow.innerHTML = `<td colspan="3" class="px-5 py-3 text-[11px] uppercase tracking-[0.2em] font-black">${item.cat}</td>`;
-                    tableBody.appendChild(hRow);
-                    lastCat = item.cat;
-                }
-
-                // Status Pill
-                let statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-slate-50 text-slate-500 border-slate-200">N/A</span>`;
-                if (compData.status === "Yes") statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-emerald-100 text-emerald-800 border-emerald-300">YES</span>`;
-                if (compData.status === "No") statusHtml = `<span class="inline-block w-20 px-2 py-1.5 rounded-lg text-[10px] font-black border bg-red-100 text-red-800 border-red-300">NO</span>`;
-
-                const row = document.createElement('tr');
-                row.className = "hover:bg-slate-50 transition-colors";
-                row.innerHTML = `
-                    <td class="p-5 text-slate-700 text-sm font-semibold border-b border-slate-100 w-1/2">${item.skill}</td>
-                    <td class="p-5 text-center border-b border-slate-100 w-32">${statusHtml}</td>
-                    <td class="p-5 text-center border-b border-slate-100">${validityHtml}</td>
-                `;
-                tableBody.appendChild(row);
+                
+                categoryData[item.cat].skills.push(statusObj);
             });
 
-            document.getElementById('statsSummary')?.classList.remove('hidden');
-            updateText('countValid', countValid);
-            updateText('countWarning', countWarning);
-            updateText('countIncomplete', countIncomplete);
+            animateValue('staffCountValid', countValid, 800);
+            animateValue('staffCountExpiring', countExpiring, 800);
+            animateValue('staffCountAction', countAction, 800);
+
+            const compliancePct = totalApplicable > 0 ? Math.round((countValid / totalApplicable) * 100) : 0;
+            animateValue('staffOverallPercent', compliancePct, 1200, '%');
+            
+            const donut = document.getElementById('staffOverallDonut');
+            donut.setAttribute('stroke-dasharray', `${compliancePct}, 100`);
+            donut.classList.remove('text-blue-600', 'text-emerald-500', 'text-amber-500', 'text-red-500');
+            
+            const txtEl = document.getElementById('staffOverallText');
+            if(compliancePct > 80) { 
+                txtEl.textContent = "Compliant"; 
+                txtEl.className = "text-sm font-black text-emerald-600 dark:text-emerald-400 block"; 
+                donut.classList.add('text-emerald-500'); 
+            }
+            else if(compliancePct >= 40) { 
+                txtEl.textContent = "Needs Attention"; 
+                txtEl.className = "text-sm font-black text-amber-500 block"; 
+                donut.classList.add('text-amber-500'); 
+            }
+            else { 
+                txtEl.textContent = "Non-Compliant"; 
+                txtEl.className = "text-sm font-black text-red-600 dark:text-red-400 block"; 
+                donut.classList.add('text-red-500'); 
+            }
+
+            const grid = document.getElementById('categoryGrid');
+            const chartContent = document.getElementById('staffCategoryChartContent');
+            const chartContainer = document.getElementById('staffCategoryChart');
+            
+            grid.innerHTML = '';
+            if (chartContent) chartContent.innerHTML = '';
+            let hasCatData = false;
+
+            Object.keys(categoryData).forEach(catName => {
+                const cat = categoryData[catName];
+                if (cat.total === 0) return;
+                hasCatData = true;
+                
+                const catPct = Math.round((cat.valid / cat.total) * 100);
+                let donutColor = catPct > 80 ? 'text-emerald-500' : (catPct >= 40 ? 'text-amber-500' : 'text-red-500');
+
+                let countV = 0, countE = 0, countM = 0;
+                let skillsHtml = '';
+                
+                cat.skills.forEach(sk => {
+                    if (sk.status === 'valid') countV++;
+                    else if (sk.status === 'expiring') countE++;
+                    else countM++;
+
+                    let pill = '';
+                    if (sk.status === 'valid') pill = `<span class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid</span>`;
+                    else if (sk.status === 'expiring') pill = `<span class="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[9px] font-black tracking-wider uppercase border border-amber-300 dark:border-amber-800">Expiring ${sk.date ? sk.date.toLocaleDateString('en-GB') : ''}</span>`;
+                    else if (sk.status === 'expired') pill = `<span class="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[9px] font-black tracking-wider uppercase border border-red-300 dark:border-red-800">Expired</span>`;
+                    else pill = `<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-wider uppercase border border-slate-200 dark:border-slate-600">Missing</span>`;
+
+                    skillsHtml += `
+                        <div class="py-2.5 border-b border-slate-100 dark:border-slate-700 last:border-0 flex justify-between items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors px-1 rounded-lg">
+                            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight flex-1 pt-0.5">${sk.name}</span>
+                            <div class="flex-shrink-0">${pill}</div>
+                        </div>
+                    `;
+                });
+
+                const vPct = (countV/cat.total)*100;
+                const ePct = (countE/cat.total)*100;
+                const mPct = (countM/cat.total)*100;
+
+                const actionSkills = cat.skills.filter(sk => sk.status === 'expired' || sk.status === 'missing').map(sk => sk.name);
+                const actionTooltipText = actionSkills.length > 0 ? `Action Needed:<br/>- ` + actionSkills.join('<br/>- ') : 'All compliant';
+                const safeTooltip = actionTooltipText.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+                if (chartContent) {
+                    chartContent.insertAdjacentHTML('beforeend', `
+                        <div class="flex items-center gap-4 text-sm group">
+                            <div class="w-1/3 md:w-1/4 font-bold text-slate-700 dark:text-slate-300 truncate text-xs group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" title="${catName}">${catName}</div>
+                            <div class="flex-1 flex items-center gap-3">
+                                <div class="flex-1 h-3.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex shadow-inner cursor-crosshair">
+                                    <div class="bg-emerald-500 hover:brightness-110 transition-all duration-1000" style="width: ${vPct}%" onmousemove="showTooltip(event, '${countV} Valid')" onmouseleave="hideTooltip()"></div>
+                                    <div class="bg-amber-400 hover:brightness-110 transition-all duration-1000" style="width: ${ePct}%" onmousemove="showTooltip(event, '${countE} Expiring')" onmouseleave="hideTooltip()"></div>
+                                    <div class="bg-red-500 hover:brightness-110 transition-all duration-1000" style="width: ${mPct}%" onmousemove="showTooltip(event, '${safeTooltip}')" onmouseleave="hideTooltip()"></div>
+                                </div>
+                                <div class="w-10 text-right font-black text-slate-800 dark:text-slate-200 text-xs">${catPct}%</div>
+                            </div>
+                        </div>
+                    `);
+                }
+
+                const cardHtml = `
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col print-break hover:shadow-lg transition-shadow duration-300">
+                        <div class="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <div class="relative w-11 h-11 flex-shrink-0">
+                                    <svg viewBox="0 0 36 36" class="w-full h-full drop-shadow-sm">
+                                        <path class="text-slate-200 dark:text-slate-700" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="${donutColor} donut-ring" stroke-dasharray="${catPct}, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center"><span class="text-[9px] font-black text-slate-800 dark:text-white">${catPct}%</span></div>
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-slate-800 dark:text-white text-sm tracking-wide uppercase leading-tight">${catName}</h4>
+                                    <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">${cat.valid}/${cat.total} Compliant</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-5 pt-4 pb-2">
+                            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mb-1.5 overflow-hidden flex shadow-inner">
+                                <div class="bg-emerald-500 h-2 transition-all duration-1000" style="width: ${vPct}%" title="Valid"></div>
+                                <div class="bg-amber-400 h-2 transition-all duration-1000" style="width: ${ePct}%" title="Expiring"></div>
+                                <div class="bg-red-500 h-2 transition-all duration-1000" style="width: ${mPct}%" title="Missing"></div>
+                            </div>
+                        </div>
+                        <div class="p-5 pt-0 overflow-y-auto max-h-64 custom-scroll flex-1">
+                            ${skillsHtml}
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', cardHtml);
+            });
+            
+            if (chartContainer) {
+                if (hasCatData) chartContainer.classList.remove('hidden');
+                else chartContainer.classList.add('hidden');
+            }
+        }
+
+        function renderUnitDashboard() {
+            const today = new Date();
+            const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
+
+            let totalStaff = 0;
+            let unitTotalSkills = 0;
+            let unitValidSkills = 0;
+            let unitExpiring = 0;
+            let unitExpiredMissing = 0;
+
+            const staffList = [];
+
+            Object.values(window.state.staffStore).forEach(profile => {
+                totalStaff++;
+                let sTotal = 0, sValid = 0, sExpiring = 0, sAction = 0;
+
+                window.state.skills.forEach(item => {
+                    const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+                    sTotal++;
+                    
+                    if (compData.status === "Yes") {
+                        if (compData.date) {
+                            const expiryDate = getExpiryDate(compData.date, item.cat);
+                            if (expiryDate < today) sAction++;
+                            else if (expiryDate <= sixtyDaysFromNow) sExpiring++;
+                            else sValid++;
+                        } else { sValid++; }
+                    } else {
+                        sAction++;
+                    }
+                });
+
+                unitTotalSkills += sTotal;
+                unitValidSkills += sValid;
+                unitExpiring += sExpiring;
+                unitExpiredMissing += sAction;
+
+                const compPct = sTotal > 0 ? Math.round((sValid/sTotal)*100) : 0;
+                staffList.push({ name: profile.name, band: profile.band, pct: compPct, expiring: sExpiring, action: sAction });
+            });
+
+            updateText('unitTotalStaff', totalStaff + " Staff Members");
+            animateValue('unitExpiringCount', unitExpiring, 800);
+            animateValue('unitExpiredCount', unitExpiredMissing, 800);
+
+            const unitPct = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
+            animateValue('unitOverallPercent', unitPct, 1200, '%');
+            document.getElementById('unitOverallDonut').setAttribute('stroke-dasharray', `${unitPct}, 100`);
+            
+            drawUnitTrendChart();
+
+            staffList.sort((a, b) => {
+                if (b.action !== a.action) return b.action - a.action;
+                return a.pct - b.pct;
+            });
+
+            const tbody = document.getElementById('unitStaffTableBody');
+            tbody.innerHTML = '';
+            
+            staffList.forEach(s => {
+                let statusDot = s.pct > 80 ? 'bg-emerald-500' : (s.pct >= 40 ? 'bg-amber-500' : 'bg-red-500');
+                let tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 last:border-0 cursor-pointer transition-colors";
+                tr.onclick = () => { document.getElementById('staffSelect').value = s.name; updateDisplay(); };
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <div class="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-2">
+                            <div class="w-2 h-2 rounded-full ${statusDot}"></div>
+                            ${s.name}
+                        </div>
+                        <div class="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest ml-4 mt-0.5">${s.band}</div>
+                    </td>
+                    <td class="p-4 text-center"><span class="font-black text-slate-700 dark:text-slate-300">${s.pct}%</span></td>
+                    <td class="p-4 text-center">
+                        ${s.expiring > 0 ? `<span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-md text-xs font-bold border border-amber-200 dark:border-amber-800">${s.expiring}</span>` : `<span class="text-slate-300 dark:text-slate-600">-</span>`}
+                    </td>
+                    <td class="p-4 text-center">
+                        ${s.action > 0 ? `<span class="px-2.5 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-md text-xs font-bold border border-red-200 dark:border-red-800">${s.action}</span>` : `<span class="text-slate-300 dark:text-slate-600">-</span>`}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        window.unitChart = null;
+        function drawUnitTrendChart() {
+            const ctx = document.getElementById('unitTrendChart');
+            if(!ctx) return;
+            
+            const currentPct = parseInt(document.getElementById('unitOverallPercent').textContent) || 0;
+            const dataPoints = window.state.trends.length > 0 ? window.state.trends : [{date: Date.now(), pct: currentPct}];
+            
+            const labels = dataPoints.map(d => new Date(d.date).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' }));
+            const data = dataPoints.map(d => d.pct);
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+            const gridColor = isDark ? '#334155' : '#f1f5f9';
+            const tooltipBg = isDark ? '#1e293b' : '#fff';
+            const tooltipTitle = isDark ? '#fff' : '#0f172a';
+            const tooltipBody = isDark ? '#cbd5e1' : '#475569';
+
+            if(window.unitChart) window.unitChart.destroy();
+            
+            window.unitChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Overall Compliance',
+                        data: data,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#3b82f6',
+                        pointBorderWidth: 2,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { display: false }, 
+                        tooltip: { 
+                            mode: 'index', intersect: false, 
+                            backgroundColor: tooltipBg, titleColor: tooltipTitle, bodyColor: tooltipBody, 
+                            borderColor: isDark ? '#334155' : '#e2e8f0', borderWidth: 1, padding: 10,
+                            callbacks: { label: function(context) { return context.parsed.y + '% Compliant'; } }
+                        } 
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } },
+                        x: { grid: { display: false }, ticks: { color: textColor } }
+                    },
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false }
+                }
+            });
         }
 
         window.filterStaffList = (e) => {
@@ -689,17 +1362,22 @@
                         c.style.display = v ? '' : 'none'; if (v) has = true;
                     });
                     opt.style.display = has ? '' : 'none';
-                } else if (opt.value === "") opt.style.display = '';
+                } else if (opt.value === "") { opt.style.display = ''; }
             });
         };
 
         window.downloadTemplate = () => {
-            const h = ["Competency/Category", "Category Heading (Optional)", ...Object.keys(window.state.staffStore)];
-            const r = [h];
-            
-            // Add PIN row example to the template
-            r.push(["PIN", "Personal Access Code", ...Object.keys(window.state.staffStore).map(() => "1234")]);
+            // Include explicitly identified bands right in the name for the template to preserve them
+            const staffHeaders = Object.values(window.state.staffStore).map(s => {
+                if (s.band && s.band !== "N/A") {
+                    return `${s.name} (${s.band})`;
+                }
+                return s.name;
+            });
 
+            const h = ["Competency/Category", "Category Heading (Optional)", ...staffHeaders];
+            const r = [h];
+            r.push(["PIN", "Personal Access Code", ...Object.keys(window.state.staffStore).map(() => "1234")]);
             window.state.categories.forEach(c => {
                 r.push([c, "TRUE", ...new Array(h.length - 2).fill("")]);
                 window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("01/01/2026")]));
