@@ -36,7 +36,7 @@
 <body class="bg-[#f8fafc] dark:bg-slate-900 min-h-screen font-sans text-slate-900 dark:text-slate-200 transition-colors duration-300">
 
     <!-- Global Floating Tooltip -->
-    <div id="globalTooltip" class="fixed opacity-0 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold px-3 py-2 rounded-lg shadow-xl max-w-[200px] pointer-events-none transform -translate-x-1/2 -translate-y-[120%]"></div>
+    <div id="globalTooltip" class="fixed opacity-0 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold px-3 py-2 rounded-lg shadow-xl max-w-[200px] pointer-events-none transform -translate-x-1/2 -translate-y-[120%] z-[9999]"></div>
 
     <!-- Custom Modal Overlay -->
     <div id="customModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 dark:bg-black/60 backdrop-blur-sm fade-in">
@@ -734,7 +734,6 @@
             let s = str.trim();
             const lower = s.toLowerCase();
             
-            // Hardcoded precision for absolute certainty
             if (lower === 'band 7' || lower === 'b7' || lower === '7') return 'Band 7';
             if (lower === 'band 6' || lower === 'b6' || lower === '6') return 'Band 6';
             if (lower === 'band 5' || lower === 'b5' || lower === '5') return 'Band 5';
@@ -764,7 +763,6 @@
             window.state.categories = []; window.state.skills = []; window.state.staffStore = {};
             if (rows.length < 1) return;
 
-            // Universal Orientation Detector
             let isRowBased = false;
             let headerRowIndex = -1;
             let nameCol = -1, bandCol = -1, pinCol = -1;
@@ -926,10 +924,25 @@
                         return false;
                     });
 
-                    if (!hasDataInRow && itemLabel.length > 2) {
-                        currentCategory = itemLabel;
-                        if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
-                        continue;
+                    // Smart Category Detection (Fixes vanishing empty competencies)
+                    const hasCategoryCol = (headerRow[1] || "").toLowerCase().includes("category heading");
+                    const isKnownCat = Object.keys(VALIDITY_RULES).includes(itemLabel.toUpperCase());
+                    const isAllCaps = itemLabel === itemLabel.toUpperCase() && /[A-Z]/.test(itemLabel);
+
+                    if (hasCategoryCol) {
+                        // If using the template, strictly rely on the "TRUE" flag in Column B
+                        if (labelB.toUpperCase() === "TRUE") {
+                            currentCategory = labelA || itemLabel;
+                            if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                            continue;
+                        }
+                    } else {
+                        // If no template column, use smart heuristics (ALL CAPS or known Endoscopy category)
+                        if (!hasDataInRow && itemLabel.length > 2 && (isKnownCat || isAllCaps)) {
+                            currentCategory = itemLabel;
+                            if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                            continue;
+                        }
                     }
 
                     window.state.skills.push({ cat: currentCategory, skill: itemLabel });
