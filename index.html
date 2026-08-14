@@ -445,7 +445,8 @@
         const VALIDITY_RULES = {
             "RECOVERY": 12, "GENERAL": 12, "ENDOSCOPY ROOM": 12, "CONSENTS AND DISCHARGING": 12,
             "ROOM COMPETENCIES": 12, "UPPER GI PROCEDURES": 6, "ASSISTING WITH EMERGENCY GI BLEEDS": 6,
-            "LOWER GI PROCEDURES": 6, "ERCP": 4, "DECONTAMINATION": 6, "JETS WORKFORCE": 12, "PRE-ASSESSMENT": 12
+            "LOWER GI PROCEDURES": 6, "ERCP": 4, "DECONTAMINATION": 6, "JETS WORKFORCE": 12, "PRE-ASSESSMENT": 12,
+            "MANAGEMENT": 1200
         };
 
         let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" };
@@ -734,6 +735,7 @@
             let s = str.trim();
             const lower = s.toLowerCase();
             
+            // Hardcoded precision for absolute certainty
             if (lower === 'band 7' || lower === 'b7' || lower === '7') return 'Band 7';
             if (lower === 'band 6' || lower === 'b6' || lower === '6') return 'Band 6';
             if (lower === 'band 5' || lower === 'b5' || lower === '5') return 'Band 5';
@@ -763,6 +765,7 @@
             window.state.categories = []; window.state.skills = []; window.state.staffStore = {};
             if (rows.length < 1) return;
 
+            // Universal Orientation Detector
             let isRowBased = false;
             let headerRowIndex = -1;
             let nameCol = -1, bandCol = -1, pinCol = -1;
@@ -930,14 +933,12 @@
                     const isAllCaps = itemLabel === itemLabel.toUpperCase() && /[A-Z]/.test(itemLabel);
 
                     if (hasCategoryCol) {
-                        // If using the template, strictly rely on the "TRUE" flag in Column B
                         if (labelB.toUpperCase() === "TRUE") {
                             currentCategory = labelA || itemLabel;
                             if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
                             continue;
                         }
                     } else {
-                        // If no template column, use smart heuristics (ALL CAPS or known Endoscopy category)
                         if (!hasDataInRow && itemLabel.length > 2 && (isKnownCat || isAllCaps)) {
                             currentCategory = itemLabel;
                             if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
