@@ -286,6 +286,7 @@
                             <div>
                                 <span class="block text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Overall Status</span>
                                 <span id="staffOverallText" class="text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight block">Calculating...</span>
+                                <div id="staffBenchmark" class="text-[10px] font-bold text-slate-500 mt-1.5"></div>
                             </div>
                         </div>
 
@@ -326,6 +327,23 @@
                         </div>
                     </div>
                     <div id="staffCategoryChartContent" class="flex flex-col gap-4"></div>
+                </div>
+
+                <!-- Timeline Section -->
+                <div id="timelineContainer" class="hidden mb-8 bg-white dark:bg-slate-800 rounded-[2rem] p-6 shadow-sm border border-slate-200 dark:border-slate-700 print-break">
+                    <h4 class="text-xs font-black text-slate-800 dark:text-slate-200 uppercase tracking-widest mb-4 flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-blue-500"></div> Upcoming Renewals (90 Days)</h4>
+                    <div id="staffTimelineGrid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+                </div>
+
+                <!-- Category Breakdown Grid -->
+                <div class="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h3 class="text-xl font-black text-slate-800 dark:text-white">Competency Breakdown</h3>
+                    
+                    <!-- Focus Mode Toggle -->
+                    <button onclick="toggleFocusMode()" id="focusModeBtn" class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-transparent shadow-sm hover:bg-slate-200 dark:hover:bg-slate-600 w-full sm:w-auto">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        Focus Mode (Show Gaps)
+                    </button>
                 </div>
 
                 <div id="categoryGrid" class="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
@@ -511,7 +529,26 @@
 
         let auth, db;
         const ADMIN_PASSCODE = "Iamn9thawk"; 
-        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [] };
+        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [], focusMode: false };
+
+        window.toggleFocusMode = function() {
+            window.state.focusMode = !window.state.focusMode;
+            const btn = document.getElementById('focusModeBtn');
+            if(window.state.focusMode) {
+                btn.classList.replace('bg-slate-100', 'bg-blue-600');
+                btn.classList.replace('dark:bg-slate-700', 'dark:bg-blue-600');
+                btn.classList.replace('text-slate-500', 'text-white');
+                btn.classList.replace('dark:text-slate-400', 'text-white');
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg> Focus Mode Active`;
+            } else {
+                btn.classList.replace('bg-blue-600', 'bg-slate-100');
+                btn.classList.replace('dark:bg-blue-600', 'dark:bg-slate-700');
+                btn.classList.replace('text-white', 'text-slate-500');
+                btn.classList.replace('text-white', 'dark:text-slate-400');
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg> Focus Mode (Show Gaps)`;
+            }
+            updateDisplay();
+        };
 
         if (firebaseConfig.apiKey && firebaseConfig.projectId) {
             try {
@@ -1127,6 +1164,21 @@
             const categoryData = {};
             window.state.categories.forEach(cat => categoryData[cat] = { total: 0, valid: 0, skills: [] });
 
+            const timelineItems = []; 
+            let unitTotalSkills = 0; let unitValidSkills = 0;
+
+            // Pre-calculate Unit Average for Benchmark
+            Object.values(window.state.staffStore).forEach(p => {
+                window.state.skills.forEach(item => {
+                    const cd = p.competencies[item.skill] || { status: "N/A", date: null };
+                    unitTotalSkills++;
+                    if (cd.status === "Yes" && (!cd.date || getExpiryDate(cd.date, item.cat) >= today)) {
+                        unitValidSkills++;
+                    }
+                });
+            });
+            const unitAvg = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
+
             window.state.skills.forEach(item => {
                 if(!categoryData[item.cat]) categoryData[item.cat] = { total: 0, valid: 0, skills: [] };
                 categoryData[item.cat].total++;
@@ -1160,6 +1212,14 @@
                     countAction++;
                 }
                 
+                // Track timeline items (90 days)
+                if (statusObj.date && (statusObj.status === 'valid' || statusObj.status === 'expiring')) {
+                    const daysUntil = Math.ceil((statusObj.date - today) / (1000 * 60 * 60 * 24));
+                    if (daysUntil > 0 && daysUntil <= 90) {
+                        timelineItems.push({ name: item.skill, days: daysUntil, date: statusObj.date });
+                    }
+                }
+
                 categoryData[item.cat].skills.push(statusObj);
             });
 
@@ -1191,6 +1251,34 @@
                 donut.classList.add('text-red-500'); 
             }
 
+            // Render Benchmark text
+            const diff = compliancePct - unitAvg;
+            const diffText = diff >= 0 ? `+${diff}%` : `${diff}%`;
+            const diffClass = diff >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
+            const benchmarkEl = document.getElementById('staffBenchmark');
+            if (benchmarkEl) benchmarkEl.innerHTML = `Unit Avg: ${unitAvg}% <span class="font-black ${diffClass} ml-1">(${diffText})</span>`;
+
+            // Render Timeline Grid
+            const tlContainer = document.getElementById('timelineContainer');
+            const tlGrid = document.getElementById('staffTimelineGrid');
+            if (tlContainer && tlGrid) {
+                if (timelineItems.length > 0) {
+                    tlContainer.classList.remove('hidden');
+                    tlGrid.innerHTML = '';
+                    timelineItems.sort((a,b) => a.days - b.days).forEach(ti => {
+                        let colorClass = ti.days <= 30 ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' : (ti.days <= 60 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50');
+                        tlGrid.insertAdjacentHTML('beforeend', `
+                            <div class="p-3 rounded-xl border ${colorClass} flex flex-col justify-center">
+                                <span class="text-[9px] font-black uppercase tracking-widest opacity-80 mb-0.5">In ${ti.days} Days</span>
+                                <span class="text-xs font-bold leading-tight truncate" title="${ti.name}">${ti.name}</span>
+                            </div>
+                        `);
+                    });
+                } else {
+                    tlContainer.classList.add('hidden');
+                }
+            }
+
             const grid = document.getElementById('categoryGrid');
             const chartContent = document.getElementById('staffCategoryChartContent');
             const chartContainer = document.getElementById('staffCategoryChart');
@@ -1215,11 +1303,17 @@
                     else if (sk.status === 'expiring') countE++;
                     else countM++;
 
+                    // FOCUS MODE: Skip rendering green valid skills if Focus Mode is toggled ON
+                    if (window.state.focusMode && sk.status === 'valid') return;
+
                     let pill = '';
-                    if (sk.status === 'valid') pill = `<span class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid</span>`;
+                    if (sk.status === 'valid') {
+                        const dateStr = sk.date ? sk.date.toLocaleDateString('en-GB') : 'No Expiry';
+                        pill = `<span class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid until ${dateStr}</span>`;
+                    }
                     else if (sk.status === 'expiring') pill = `<span class="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[9px] font-black tracking-wider uppercase border border-amber-300 dark:border-amber-800">Expiring ${sk.date ? sk.date.toLocaleDateString('en-GB') : ''}</span>`;
                     else if (sk.status === 'expired') pill = `<span class="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[9px] font-black tracking-wider uppercase border border-red-300 dark:border-red-800">Expired</span>`;
-                    else pill = `<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-wider uppercase border border-slate-200 dark:border-slate-600">Missing</span>`;
+                    else pill = `<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-wider uppercase border border-slate-200 dark:border-slate-600">Action Required</span>`;
 
                     skillsHtml += `
                         <div class="py-2.5 border-b border-slate-100 dark:border-slate-700 last:border-0 flex justify-between items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors px-1 rounded-lg">
@@ -1228,6 +1322,9 @@
                         </div>
                     `;
                 });
+
+                // FOCUS MODE: If all skills in this category were valid, hide the entire category card
+                if (window.state.focusMode && skillsHtml === '') return;
 
                 const vPct = (countV/cat.total)*100;
                 const ePct = (countE/cat.total)*100;
