@@ -16,7 +16,6 @@
     <style>
         .loading-spinner { border-top-color: #3b82f6; animation: spinner 0.6s linear infinite; }
         @keyframes spinner { to { transform: rotate(360deg); } }
-        @media print { .no-print { display: none !important; } .print-break { page-break-inside: avoid; } }
         .fade-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -31,6 +30,22 @@
 
         /* Tooltip Container */
         #globalTooltip { transition: opacity 0.15s ease-in-out; pointer-events: none; z-index: 9999; }
+
+        @media print { 
+            .no-print { display: none !important; } 
+            .print-break { page-break-inside: avoid; }
+            
+            /* Force Formal Document Styles for 1-to-1 Meetings */
+            body { background: white !important; color: black !important; }
+            .bg-slate-900, .bg-slate-950, .dark\:bg-slate-800 { 
+                background: white !important; 
+                color: black !important; 
+                border: 1px solid #cbd5e1 !important; 
+            }
+            .text-white { color: #0f172a !important; }
+            .shadow-xl, .shadow-sm { box-shadow: none !important; }
+            #staffCategoryChart { display: none !important; }
+        }
     </style>
 </head>
 <body class="bg-[#f8fafc] dark:bg-slate-900 min-h-screen font-sans text-slate-900 dark:text-slate-200 transition-colors duration-300">
@@ -106,11 +121,14 @@
             </div>
 
             <div class="flex items-center gap-3 self-end xl:self-auto">
-                 <button onclick="toggleTheme()" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
+                <button onclick="exportAnalytics()" class="hidden md:flex px-6 py-3.5 bg-emerald-600 text-white text-xs font-black rounded-xl shadow-lg hover:bg-emerald-700 uppercase tracking-wider transition-all items-center gap-2">
+                    📊 Export Analytics
+                </button>
+                <button onclick="toggleTheme()" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
                     <svg id="themeIconSun" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                     <svg id="themeIconMoon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
-                 </button>
-                 <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-6 py-3.5 bg-slate-900 dark:bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black dark:hover:bg-blue-700 uppercase tracking-wider transition-all flex items-center gap-2">
+                </button>
+                <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-6 py-3.5 bg-slate-900 dark:bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black dark:hover:bg-blue-700 uppercase tracking-wider transition-all flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                     Update Database
                 </button>
@@ -144,13 +162,16 @@
         <div id="mainContent" class="hidden fade-in">
             
             <!-- Controls (Search/Filter) -->
-            <div class="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row mb-8 no-print max-w-3xl">
-                <div id="staffSearchDiv" class="flex-1 flex flex-col sm:flex-row border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 relative">
+            <div class="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-2 mb-8 no-print max-w-3xl">
+                <div id="staffSearchDiv" class="flex-1 flex flex-col sm:flex-row relative">
                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     </div>
-                    <input type="text" oninput="filterStaffList(event)" placeholder="Search staff..." class="pl-10 p-4 bg-transparent outline-none text-sm font-semibold w-full sm:w-1/2 border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 dark:text-white" />
-                    <select id="staffSelect" onchange="updateDisplay()" class="w-full p-4 bg-transparent font-black text-slate-800 dark:text-white outline-none tracking-wide cursor-pointer appearance-none"><option value="">-- Unit Overview --</option></select>
+                    <input type="text" id="staffSearchInput" oninput="applyFilters()" placeholder="Search staff..." class="pl-10 p-4 bg-transparent outline-none text-sm font-semibold w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 dark:text-white" />
+                    
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full sm:w-64 p-4 bg-transparent font-black text-slate-800 dark:text-white outline-none tracking-wide cursor-pointer appearance-none">
+                        <option value="">-- Unit Overview --</option>
+                    </select>
                 </div>
             </div>
 
@@ -158,7 +179,7 @@
             <div id="unitDashboard" class="hidden">
                 <div class="mb-6"><h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Unit Performance Overview</h2><p class="text-slate-500 dark:text-slate-400 text-sm">High-level compliance statistics across all staff.</p></div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                     <!-- Unit Total Compliance -->
                     <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-6 relative overflow-hidden">
                         <div class="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-full opacity-50 pointer-events-none"></div>
@@ -202,6 +223,26 @@
                     </div>
                 </div>
 
+                <!-- Appraisals Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- Overdue Appraisals -->
+                    <div class="bg-rose-50 rounded-3xl p-6 shadow-sm border border-rose-200 flex flex-col justify-center relative overflow-hidden dark:bg-rose-900/20 dark:border-rose-900/50">
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-rose-600 mb-1 z-10 dark:text-rose-400">Overdue Appraisals</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitAppraisalsOverdue" class="text-4xl font-black text-rose-700 leading-none dark:text-rose-300">0</span>
+                            <span class="text-xs font-bold text-rose-600/80 mb-1 dark:text-rose-400/80">Staff</span>
+                        </div>
+                    </div>
+                    <!-- Upcoming Appraisals -->
+                    <div class="bg-orange-50 rounded-3xl p-6 shadow-sm border border-orange-200 flex flex-col justify-center relative overflow-hidden dark:bg-orange-900/20 dark:border-orange-900/50">
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-orange-600 mb-1 z-10 dark:text-orange-400">Appraisals Due (30 Days)</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitAppraisalsUpcoming" class="text-4xl font-black text-orange-700 leading-none dark:text-orange-300">0</span>
+                            <span class="text-xs font-bold text-orange-600/80 mb-1 dark:text-orange-400/80">Staff</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Unit Historic Trend Chart (Admin Only) -->
                 <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8 p-8 print-break transition-colors">
                     <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Compliance Trend</h3>
@@ -210,7 +251,7 @@
                     </div>
                 </div>
 
-                <!-- New Analytics Row: Risk & Categories -->
+                <!-- Analytics Row: Risk & Categories -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <!-- Staff Risk Breakdown -->
                     <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-8 print-break">
@@ -230,6 +271,22 @@
                     </div>
                 </div>
 
+                <!-- Recent Achievements Board -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden mb-8 print-break">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
+                        <h3 class="text-white font-black tracking-wide text-lg flex items-center gap-3">
+                            <span class="text-2xl">🌟</span> Recent Achievements
+                        </h3>
+                        <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Last 30 Days</span>
+                    </div>
+                    <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30">
+                        <div id="recentAchievementsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                        <div id="noAchievementsMsg" class="hidden text-center py-10 text-slate-500 dark:text-slate-400 text-sm font-bold">
+                            No recent achievements in the last 30 days.
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Unit Staff Breakdown Table -->
                 <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
                     <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
@@ -237,10 +294,12 @@
                         <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Action Required</span>
                     </div>
                     <div class="overflow-x-auto max-h-[500px] custom-scroll">
-                        <table class="w-full text-left border-collapse">
+                        <table class="w-full text-left border-collapse" id="staffTable">
                             <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800 shadow-sm z-10">
                                 <tr class="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-black tracking-widest">
                                     <th class="p-4 border-b border-slate-200 dark:border-slate-700">Staff Member</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700">Team Leader</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Appraisal</th>
                                     <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Compliance</th>
                                     <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Expiring Soon</th>
                                     <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Action Needed</th>
@@ -270,6 +329,24 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
                                 PRINT REPORT
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- Appraisal Banner -->
+                    <div id="appraisalBanner" class="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-700 p-6 flex flex-col md:flex-row gap-6 items-start">
+                        <div class="flex-1">
+                            <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Appraisal Goal</h4>
+                            <div id="displayAppraisalGoal"></div>
+                        </div>
+                        <div class="md:w-64 flex flex-col gap-4">
+                            <div>
+                                <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Due Date</h4>
+                                <span id="displayAppraisalDate" class="font-bold text-slate-800 dark:text-slate-200 block"></span>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Appraiser / Team Leader</h4>
+                                <span id="displayAppraiser" class="font-bold text-slate-800 dark:text-slate-200 block"></span>
+                            </div>
                         </div>
                     </div>
                     
@@ -376,7 +453,7 @@
         </footer>
 
         <div class="mt-16 pb-8 text-center no-print border-t border-slate-100 dark:border-slate-800 pt-8">
-            <p class="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Junior Charge Nurse Endoscopy Unit and Gemini</p>
+            <p class="text-[10px] uppercase font-black tracking-widest text-slate-400 leading-relaxed max-w-md mx-auto">Co-developed by Darryl James Tolentino, Charge Nurse Endoscopy Unit and Gemini</p>
         </div>
     </div>
 
@@ -390,6 +467,35 @@
             set: (key, val) => { try { localStorage.setItem(key, val); } catch(e) {} },
             get: (key) => { try { return localStorage.getItem(key); } catch(e) { return null; } },
             remove: (key) => { try { localStorage.removeItem(key); } catch(e) {} }
+        };
+
+        window.exportAnalytics = function() {
+            let csvContent = "data:text/csv;charset=utf-8,Staff Name,Band,Team Leader,Appraisal Due,Category,Competency,Status,Date Achieved\n";
+            
+            Object.values(window.state.staffStore).forEach(profile => {
+                const tl = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || 'Unassigned';
+                const appDue = profile.competencies['Appraisal Due Date']?.rawText || 'No Date';
+
+                window.state.skills.forEach(item => {
+                    const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                    if (isMeta) return;
+
+                    const comp = profile.competencies[item.skill];
+                    if (comp) {
+                        const status = comp.status;
+                        const dateStr = comp.date ? comp.date.toLocaleDateString('en-GB') : '';
+                        csvContent += `"${profile.name}","${profile.band}","${tl}","${appDue}","${item.cat}","${item.skill}","${status}","${dateStr}"\n`;
+                    }
+                });
+            });
+            
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "Endoscopy_Unit_Competency_Data.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         };
 
         window.toggleTheme = () => {
@@ -453,7 +559,7 @@
             const btnCancel = document.getElementById('modalBtnCancel');
             const btnConfirm = document.getElementById('modalBtnConfirm');
 
-            icon.className = "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6";
+            icon.className = "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 bg-blue-50 dark:bg-blue-900/30";
             btnConfirm.className = "flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-colors";
 
             if (type === 'error') {
@@ -760,7 +866,6 @@
             try {
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'competency_records', 'latest'), { csvText: csvText, updatedAt: Date.now() });
                 
-                // Re-calculate accurate percentage using updated state and strict logic
                 const today = new Date();
                 const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
 
@@ -769,6 +874,9 @@
 
                 Object.values(window.state.staffStore).forEach(profile => {
                     window.state.skills.forEach(item => {
+                        const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                        if (isMeta) return;
+
                         const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
                         unitTotalSkills++;
                         if (compData.status === "Yes") {
@@ -786,7 +894,6 @@
                 const now = Date.now();
                 const todayStr = new Date(now).toLocaleDateString('en-GB');
                 
-                // Deduplicate older entries and update today's data point
                 const trendMap = new Map();
                 window.state.trends.forEach(t => {
                     const dStr = new Date(t.date).toLocaleDateString('en-GB');
@@ -798,20 +905,18 @@
                     .sort((a, b) => a.date - b.date)
                     .slice(-15);
 
-                // Auto-Backfill History if wiped by duplicate bug
                 if (updatedTrends.length === 1) {
                     const backfilled = [];
                     for (let i = 5; i > 0; i--) {
                         let pastDate = new Date(now);
-                        pastDate.setDate(pastDate.getDate() - (i * 7)); // 1 week intervals backward
-                        // Create a realistic gradual increase leading to today's real score
+                        pastDate.setDate(pastDate.getDate() - (i * 7)); 
                         let pastPct = Math.max(0, unitPct - (i * 3) - Math.floor(Math.random() * 4)); 
                         backfilled.push({ date: pastDate.getTime(), pct: pastPct });
                     }
                     updatedTrends = [...backfilled, updatedTrends[0]];
                 }
                     
-                window.state.trends = updatedTrends; // Update local memory
+                window.state.trends = updatedTrends; 
                 
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trends', 'unit_history'), { history: updatedTrends });
                 if (window.state.accessLevel === 'admin' && window.unitChart) drawUnitTrendChart();
@@ -841,7 +946,6 @@
             let s = str.trim();
             const lower = s.toLowerCase();
             
-            // Hardcoded precision for absolute certainty
             if (lower === 'band 7' || lower === 'b7' || lower === '7') return 'Band 7';
             if (lower === 'band 6' || lower === 'b6' || lower === '6') return 'Band 6';
             if (lower === 'band 5' || lower === 'b5' || lower === '5') return 'Band 5';
@@ -871,7 +975,6 @@
             window.state.categories = []; window.state.skills = []; window.state.staffStore = {};
             if (rows.length < 1) return;
 
-            // Universal Orientation Detector
             let isRowBased = false;
             let headerRowIndex = -1;
             let nameCol = -1, bandCol = -1, pinCol = -1;
@@ -890,9 +993,7 @@
             }
 
             if (isRowBased) {
-                // ==========================================
-                // PARSE: STAFF IN ROWS (Standard HR Export)
-                // ==========================================
+                // ROW BASED PARSING
                 const headerRow = rows[headerRowIndex];
                 const competencyCols = [];
                 
@@ -949,14 +1050,13 @@
                         else if (val) {
                             dateAchieved = parseDateString(val);
                             if (dateAchieved) status = "Yes";
+                            else status = val;
                         }
-                        window.state.staffStore[cleanName].competencies[comp.skill] = { status, date: dateAchieved };
+                        window.state.staffStore[cleanName].competencies[comp.skill] = { status, date: dateAchieved, rawText: val };
                     });
                 }
             } else {
-                // ==========================================
-                // PARSE: STAFF IN COLUMNS (Template Format)
-                // ==========================================
+                // COLUMN BASED PARSING
                 let headerIndex = -1;
                 for (let i = 0; i < Math.min(rows.length, 25); i++) {
                     if (rows[i].slice(1).filter(c => c && c.trim() !== "").length >= 2) { 
@@ -1033,7 +1133,6 @@
                         return false;
                     });
 
-                    // Smart Category Detection (Fixes vanishing empty competencies)
                     const hasCategoryCol = (headerRow[1] || "").toLowerCase().includes("category heading");
                     const isKnownCat = Object.keys(VALIDITY_RULES).includes(itemLabel.toUpperCase());
                     const isAllCaps = itemLabel === itemLabel.toUpperCase() && /[A-Z]/.test(itemLabel);
@@ -1067,8 +1166,9 @@
                         } else if (val) {
                             dateAchieved = parseDateString(val);
                             if (dateAchieved) status = "Yes";
+                            else status = val;
                         }
-                        window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved };
+                        window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved, rawText: val };
                     });
                 }
             }
@@ -1093,8 +1193,9 @@
             if (!select) return;
             const currentSelected = select.value;
             select.innerHTML = '<option value="">-- Unit Overview --</option>';
-
+            
             const staffByBand = {};
+
             Object.values(window.state.staffStore).forEach(s => {
                 if (!staffByBand[s.band]) staffByBand[s.band] = [];
                 staffByBand[s.band].push(s);
@@ -1102,9 +1203,9 @@
 
             Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
                 const group = document.createElement('optgroup'); group.label = band;
-                
                 staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
-                    const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
+                    const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; 
+                    group.appendChild(opt);
                 });
                 select.appendChild(group);
             });
@@ -1125,6 +1226,44 @@
                 select.value = currentSelected; updateDisplay();
             }
         }
+
+        window.applyFilters = () => {
+            const searchInput = document.getElementById('staffSearchInput');
+            const staffSelect = document.getElementById('staffSelect');
+
+            const term = searchInput ? searchInput.value.toLowerCase() : '';
+
+            // Filter Top Dropdown
+            if (staffSelect) {
+                const options = staffSelect.querySelectorAll('option, optgroup');
+                options.forEach(opt => {
+                    if (opt.tagName === 'OPTGROUP') {
+                        let has = false;
+                        opt.querySelectorAll('option').forEach(c => {
+                            const nameMatch = c.textContent.toLowerCase().includes(term);
+                            const v = nameMatch;
+                            
+                            c.style.display = v ? '' : 'none'; 
+                            if (v) has = true;
+                        });
+                        opt.style.display = has ? '' : 'none';
+                    } else if (opt.value === "") { opt.style.display = ''; }
+                });
+            }
+
+            // Filter Table (if unit dashboard is visible)
+            const tbody = document.getElementById('unitStaffTableBody');
+            if (tbody) {
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(tr => {
+                    const nameCell = tr.querySelector('td:nth-child(1)');
+                    const nameMatch = nameCell && nameCell.textContent.toLowerCase().includes(term);
+                    
+                    if (nameMatch) tr.style.display = '';
+                    else tr.style.display = 'none';
+                });
+            }
+        };
 
         function getExpiryDate(achievedDate, categoryName) {
             const defaultMonths = 12;
@@ -1156,6 +1295,29 @@
 
             updateText('displayName', profile.name);
             updateText('displayBand', profile.band);
+
+            // Populate Appraisal Banner
+            const appraiser = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || "Unassigned";
+            let appDueDateStr = "No Date Set";
+            const appDue = profile.competencies['Appraisal Due Date'];
+            if (appDue && appDue.date) appDueDateStr = appDue.date.toLocaleDateString('en-GB');
+            else if (appDue && appDue.rawText) appDueDateStr = appDue.rawText;
+
+            let rawGoalText = profile.competencies['Appraisal Goal']?.rawText || "No goal set";
+            if (rawGoalText !== "No goal set" && rawGoalText !== "N/A" && rawGoalText !== "No" && rawGoalText.trim() !== '') {
+                const goalItems = rawGoalText.split('\n').filter(g => g.trim() !== '');
+                const formattedGoals = `<ul class="list-disc pl-5 mt-2 space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    ${goalItems.map(g => `<li>${g.trim()}</li>`).join('')}
+                </ul>`;
+                document.getElementById('displayAppraisalGoal').innerHTML = formattedGoals;
+            } else {
+                document.getElementById('displayAppraisalGoal').innerHTML = "<span class='text-slate-400 italic text-sm mt-2 block'>No goal recorded in database</span>";
+            }
+            updateText('displayAppraisalDate', appDueDateStr);
+            updateText('displayAppraiser', appraiser);
+
+            // Remove hidden class from banner
+            document.getElementById('appraisalBanner').classList.remove('hidden');
             
             let countValid = 0, countExpiring = 0, countAction = 0, totalApplicable = 0;
             const today = new Date();
@@ -1167,9 +1329,11 @@
             const timelineItems = []; 
             let unitTotalSkills = 0; let unitValidSkills = 0;
 
-            // Pre-calculate Unit Average for Benchmark
             Object.values(window.state.staffStore).forEach(p => {
                 window.state.skills.forEach(item => {
+                    const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                    if (isMeta) return;
+
                     const cd = p.competencies[item.skill] || { status: "N/A", date: null };
                     unitTotalSkills++;
                     if (cd.status === "Yes" && (!cd.date || getExpiryDate(cd.date, item.cat) >= today)) {
@@ -1180,6 +1344,9 @@
             const unitAvg = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
 
             window.state.skills.forEach(item => {
+                const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                if (isMeta) return;
+
                 if(!categoryData[item.cat]) categoryData[item.cat] = { total: 0, valid: 0, skills: [] };
                 categoryData[item.cat].total++;
                 totalApplicable++;
@@ -1212,7 +1379,6 @@
                     countAction++;
                 }
                 
-                // Track timeline items (90 days)
                 if (statusObj.date && (statusObj.status === 'valid' || statusObj.status === 'expiring')) {
                     const daysUntil = Math.ceil((statusObj.date - today) / (1000 * 60 * 60 * 24));
                     if (daysUntil > 0 && daysUntil <= 90) {
@@ -1251,14 +1417,12 @@
                 donut.classList.add('text-red-500'); 
             }
 
-            // Render Benchmark text
             const diff = compliancePct - unitAvg;
             const diffText = diff >= 0 ? `+${diff}%` : `${diff}%`;
             const diffClass = diff >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
             const benchmarkEl = document.getElementById('staffBenchmark');
             if (benchmarkEl) benchmarkEl.innerHTML = `Unit Avg: ${unitAvg}% <span class="font-black ${diffClass} ml-1">(${diffText})</span>`;
 
-            // Render Timeline Grid
             const tlContainer = document.getElementById('timelineContainer');
             const tlGrid = document.getElementById('staffTimelineGrid');
             if (tlContainer && tlGrid) {
@@ -1303,7 +1467,6 @@
                     else if (sk.status === 'expiring') countE++;
                     else countM++;
 
-                    // FOCUS MODE: Skip rendering green valid skills if Focus Mode is toggled ON
                     if (window.state.focusMode && sk.status === 'valid') return;
 
                     let pill = '';
@@ -1323,7 +1486,6 @@
                     `;
                 });
 
-                // FOCUS MODE: If all skills in this category were valid, hide the entire category card
                 if (window.state.focusMode && skillsHtml === '') return;
 
                 const vPct = (countV/cat.total)*100;
@@ -1390,50 +1552,70 @@
 
         function renderUnitDashboard() {
             const today = new Date();
+            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(today.getDate() - 30);
             const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
+            const thirtyDaysFromNow = new Date(); thirtyDaysFromNow.setDate(today.getDate() + 30);
 
             let totalStaff = 0;
-            let unitTotalSkills = 0;
-            let unitValidSkills = 0;
-            let unitExpiring = 0;
-            let unitExpiredMissing = 0;
-            
-            let staffCompliant = 0;
-            let staffAttention = 0;
-            let staffNonCompliant = 0;
+            let unitTotalSkills = 0, unitValidSkills = 0, unitExpiring = 0, unitExpiredMissing = 0;
+            let staffCompliant = 0, staffAttention = 0, staffNonCompliant = 0;
+            let appraisalsOverdue = 0, appraisalsUpcoming = 0;
 
             const unitCatData = {};
             window.state.categories.forEach(cat => unitCatData[cat] = { valid: 0, total: 0 });
 
             const staffList = [];
+            const recentAchievements = [];
 
             Object.values(window.state.staffStore).forEach(profile => {
                 totalStaff++;
                 let sTotal = 0, sValid = 0, sExpiring = 0, sAction = 0;
 
+                // Handle Appraisal Logic
+                const appDue = profile.competencies['Appraisal Due Date'];
+                let appStatusStr = `<span class="text-emerald-500 font-bold">Valid</span>`;
+                if (appDue && appDue.date) {
+                    if (appDue.date < today) {
+                        appraisalsOverdue++;
+                        appStatusStr = `<span class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded text-[10px] font-black uppercase">Overdue</span>`;
+                    } else if (appDue.date <= thirtyDaysFromNow) {
+                        appraisalsUpcoming++;
+                        appStatusStr = `<span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase">Due Soon</span>`;
+                    } else {
+                        appStatusStr = `<span class="text-slate-400 text-xs">${appDue.date.toLocaleDateString('en-GB')}</span>`;
+                    }
+                } else {
+                    appStatusStr = `<span class="text-slate-300">-</span>`;
+                }
+
+                const tl = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || "Unassigned";
+
                 window.state.skills.forEach(item => {
+                    const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
                     const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
-                    sTotal++;
-                    if(unitCatData[item.cat]) unitCatData[item.cat].total++;
                     
-                    if (compData.status === "Yes") {
-                        if (compData.date) {
-                            const expiryDate = getExpiryDate(compData.date, item.cat);
-                            if (expiryDate < today) {
-                                sAction++;
-                            } else if (expiryDate <= sixtyDaysFromNow) {
-                                sExpiring++;
-                                if(unitCatData[item.cat]) unitCatData[item.cat].valid++;
-                            } else {
-                                sValid++;
+                    if (!isMeta) {
+                        sTotal++;
+                        if(unitCatData[item.cat]) unitCatData[item.cat].total++;
+                        
+                        if (compData.status === "Yes") {
+                            if (compData.date) {
+                                const expiryDate = getExpiryDate(compData.date, item.cat);
+                                if (expiryDate < today) sAction++;
+                                else if (expiryDate <= sixtyDaysFromNow) { sExpiring++; if(unitCatData[item.cat]) unitCatData[item.cat].valid++; }
+                                else { sValid++; if(unitCatData[item.cat]) unitCatData[item.cat].valid++; }
+                            } else { 
+                                sValid++; 
                                 if(unitCatData[item.cat]) unitCatData[item.cat].valid++;
                             }
-                        } else { 
-                            sValid++; 
-                            if(unitCatData[item.cat]) unitCatData[item.cat].valid++;
+                        } else {
+                            sAction++;
                         }
-                    } else {
-                        sAction++;
+                    }
+
+                    // Handle Recent Achievements
+                    if (!isMeta && compData.status === "Yes" && compData.date && compData.date >= thirtyDaysAgo && compData.date <= today) {
+                        recentAchievements.push({ name: profile.name, band: profile.band, skill: item.skill, date: compData.date });
                     }
                 });
 
@@ -1443,17 +1625,18 @@
                 unitExpiredMissing += sAction;
 
                 const compPct = sTotal > 0 ? Math.round((sValid/sTotal)*100) : 0;
-                
                 if (compPct > 80) staffCompliant++;
                 else if (compPct >= 40) staffAttention++;
                 else staffNonCompliant++;
 
-                staffList.push({ name: profile.name, band: profile.band, pct: compPct, expiring: sExpiring, action: sAction });
+                staffList.push({ name: profile.name, band: profile.band, tl: tl, appStatusStr: appStatusStr, pct: compPct, expiring: sExpiring, action: sAction });
             });
 
             updateText('unitTotalStaff', totalStaff + " Staff Members");
             animateValue('unitExpiringCount', unitExpiring, 800);
             animateValue('unitExpiredCount', unitExpiredMissing, 800);
+            animateValue('unitAppraisalsOverdue', appraisalsOverdue, 800);
+            animateValue('unitAppraisalsUpcoming', appraisalsUpcoming, 800);
 
             const unitPct = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
             animateValue('unitOverallPercent', unitPct, 1200, '%');
@@ -1463,6 +1646,36 @@
             drawRiskChart(staffCompliant, staffAttention, staffNonCompliant);
             drawUnitCategoryChart(unitCatData);
 
+            // Render Achievements
+            recentAchievements.sort((a, b) => b.date - a.date);
+            const achievementsGrid = document.getElementById('recentAchievementsGrid');
+            const noAchievementsMsg = document.getElementById('noAchievementsMsg');
+            if (achievementsGrid && noAchievementsMsg) {
+                achievementsGrid.innerHTML = '';
+                if (recentAchievements.length > 0) {
+                    noAchievementsMsg.classList.add('hidden');
+                    achievementsGrid.classList.remove('hidden');
+                    recentAchievements.forEach(ach => {
+                        const dateStr = ach.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        achievementsGrid.insertAdjacentHTML('beforeend', `
+                            <div class="flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-100 to-amber-200 dark:from-yellow-900/40 dark:to-amber-700/40 flex items-center justify-center text-xl shadow-sm flex-shrink-0 border border-yellow-200 dark:border-amber-800">🏆</div>
+                                <div>
+                                    <h4 class="text-sm font-black text-slate-800 dark:text-white leading-tight">${ach.name}</h4>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">${ach.band}</p>
+                                    <p class="text-xs font-semibold text-blue-600 dark:text-blue-400 leading-snug">${ach.skill}</p>
+                                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Achieved: ${dateStr}</p>
+                                </div>
+                            </div>
+                        `);
+                    });
+                } else {
+                    achievementsGrid.classList.add('hidden');
+                    noAchievementsMsg.classList.remove('hidden');
+                }
+            }
+
+            // Render Staff Table
             staffList.sort((a, b) => {
                 if (b.action !== a.action) return b.action - a.action;
                 return a.pct - b.pct;
@@ -1484,6 +1697,8 @@
                         </div>
                         <div class="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-widest ml-4 mt-0.5">${s.band}</div>
                     </td>
+                    <td class="p-4 text-xs text-slate-500 dark:text-slate-400 font-bold">${s.tl}</td>
+                    <td class="p-4 text-center">${s.appStatusStr}</td>
                     <td class="p-4 text-center"><span class="font-black text-slate-700 dark:text-slate-300">${s.pct}%</span></td>
                     <td class="p-4 text-center">
                         ${s.expiring > 0 ? `<span class="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-md text-xs font-bold border border-amber-200 dark:border-amber-800">${s.expiring}</span>` : `<span class="text-slate-300 dark:text-slate-600">-</span>`}
@@ -1494,6 +1709,7 @@
                 `;
                 tbody.appendChild(tr);
             });
+            applyFilters();
         }
 
         window.unitChart = null;
@@ -1602,7 +1818,6 @@
             if(!ctx) return;
             if(window.unitCatChart) window.unitCatChart.destroy();
 
-            // Calculate percentage and sort to show lowest compliance at the top
             const formattedData = Object.keys(catData).map(cat => {
                 const total = catData[cat].total;
                 const valid = catData[cat].valid;
@@ -1645,23 +1860,7 @@
             });
         }
 
-        window.filterStaffList = (e) => {
-            const term = e.target.value.toLowerCase();
-            const options = document.getElementById('staffSelect')?.querySelectorAll('option, optgroup');
-            options?.forEach(opt => {
-                if (opt.tagName === 'OPTGROUP') {
-                    let has = false;
-                    opt.querySelectorAll('option').forEach(c => {
-                        const v = c.textContent.toLowerCase().includes(term);
-                        c.style.display = v ? '' : 'none'; if (v) has = true;
-                    });
-                    opt.style.display = has ? '' : 'none';
-                } else if (opt.value === "") { opt.style.display = ''; }
-            });
-        };
-
         window.downloadTemplate = () => {
-            // Include explicitly identified bands right in the name for the template to preserve them
             const staffHeaders = Object.values(window.state.staffStore).map(s => {
                 if (s.band && s.band !== "N/A") {
                     return `${s.name} (${s.band})`;
@@ -1672,6 +1871,9 @@
             const h = ["Competency/Category", "Category Heading (Optional)", ...staffHeaders];
             const r = [h];
             r.push(["PIN", "Personal Access Code", ...Object.keys(window.state.staffStore).map(() => "1234")]);
+            r.push(["Appraisal Due Date", "TRUE", ...new Array(h.length - 2).fill("01/01/2026")]);
+            r.push(["Appraiser/ Team Leader", "TRUE", ...new Array(h.length - 2).fill("Team Leader Name")]);
+            r.push(["Appraisal Goal", "TRUE", ...new Array(h.length - 2).fill("Goal 1\nGoal 2")]);
             window.state.categories.forEach(c => {
                 r.push([c, "TRUE", ...new Array(h.length - 2).fill("")]);
                 window.state.skills.filter(s => s.cat === c).forEach(sk => r.push([sk.skill, "", ...new Array(h.length - 2).fill("01/01/2026")]));
