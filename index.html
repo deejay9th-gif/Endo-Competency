@@ -271,15 +271,23 @@
                     </div>
                 </div>
 
-                <!-- Recent Achievements Board -->
+                <!-- Recent Achievements Board with Minimize/Maximize -->
                 <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden mb-8 print-break">
                     <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
                         <h3 class="text-white font-black tracking-wide text-lg flex items-center gap-3">
                             <span class="text-2xl">🌟</span> Recent Achievements
                         </h3>
-                        <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Last 30 Days</span>
+                        <div class="flex items-center gap-3">
+                            <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Last 30 Days</span>
+                            <button onclick="toggleAchievements()" id="achievementsToggleBtn" class="hidden p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10" title="Expand/Collapse">
+                                <!-- Down arrow (Expand) -->
+                                <svg id="iconExpand" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                <!-- Up arrow (Collapse) -->
+                                <svg id="iconCollapse" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30">
+                    <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30 transition-all">
                         <div id="recentAchievementsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
                         <div id="noAchievementsMsg" class="hidden text-center py-10 text-slate-500 dark:text-slate-400 text-sm font-bold">
                             No recent achievements in the last 30 days.
@@ -635,7 +643,37 @@
 
         let auth, db;
         const ADMIN_PASSCODE = "Iamn9thawk"; 
-        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [], focusMode: false };
+        
+        // ADDED achievementsExpanded state flag here
+        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [], focusMode: false, achievementsExpanded: false };
+
+        // ADDED Achievements Toggle Function
+        window.toggleAchievements = function() {
+            window.state.achievementsExpanded = !window.state.achievementsExpanded;
+            const grid = document.getElementById('recentAchievementsGrid');
+            if(grid) {
+                const cards = grid.querySelectorAll('.achievement-card');
+                cards.forEach((card, index) => {
+                    if(index >= 3) {
+                        if(window.state.achievementsExpanded) {
+                            card.classList.remove('hidden');
+                        } else {
+                            card.classList.add('hidden');
+                        }
+                    }
+                });
+            }
+            // Update icons
+            const iconExp = document.getElementById('iconExpand');
+            const iconCol = document.getElementById('iconCollapse');
+            if (window.state.achievementsExpanded) {
+                iconExp?.classList.add('hidden');
+                iconCol?.classList.remove('hidden');
+            } else {
+                iconExp?.classList.remove('hidden');
+                iconCol?.classList.add('hidden');
+            }
+        };
 
         window.toggleFocusMode = function() {
             window.state.focusMode = !window.state.focusMode;
@@ -1650,15 +1688,26 @@
             recentAchievements.sort((a, b) => b.date - a.date);
             const achievementsGrid = document.getElementById('recentAchievementsGrid');
             const noAchievementsMsg = document.getElementById('noAchievementsMsg');
+            const toggleBtn = document.getElementById('achievementsToggleBtn');
+            
             if (achievementsGrid && noAchievementsMsg) {
                 achievementsGrid.innerHTML = '';
                 if (recentAchievements.length > 0) {
                     noAchievementsMsg.classList.add('hidden');
                     achievementsGrid.classList.remove('hidden');
-                    recentAchievements.forEach(ach => {
+                    
+                    if (toggleBtn) {
+                        if (recentAchievements.length > 3) toggleBtn.classList.remove('hidden');
+                        else toggleBtn.classList.add('hidden');
+                    }
+
+                    recentAchievements.forEach((ach, index) => {
                         const dateStr = ach.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        // ADDED HIDDEN LOGIC HERE
+                        const hiddenClass = (!window.state.achievementsExpanded && index >= 3) ? 'hidden' : '';
+                        
                         achievementsGrid.insertAdjacentHTML('beforeend', `
-                            <div class="flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                            <div class="achievement-card ${hiddenClass} flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
                                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-100 to-amber-200 dark:from-yellow-900/40 dark:to-amber-700/40 flex items-center justify-center text-xl shadow-sm flex-shrink-0 border border-yellow-200 dark:border-amber-800">🏆</div>
                                 <div>
                                     <h4 class="text-sm font-black text-slate-800 dark:text-white leading-tight">${ach.name}</h4>
@@ -1672,6 +1721,7 @@
                 } else {
                     achievementsGrid.classList.add('hidden');
                     noAchievementsMsg.classList.remove('hidden');
+                    if (toggleBtn) toggleBtn.classList.add('hidden');
                 }
             }
 
