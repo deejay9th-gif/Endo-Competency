@@ -515,151 +515,8 @@
                     if (comp) {
                         const status = comp.status;
                         const dateStr = comp.date ? comp.date.toLocaleDateString('en-GB') : '';
-                        csvContent += `"${profile.name}","${profile.band}","${tl}","${appDue}","${item.cat}","${item.skill}","${status}","${dateStr}"\n`;
-                    }
-                });
-            });
-            
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", "Endoscopy_Unit_Competency_Data.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        };
-
-        window.toggleTheme = () => {
-            const isDark = document.documentElement.classList.toggle('dark');
-            safeStorage.set('competency_theme', isDark ? 'dark' : 'light');
-            document.getElementById('themeIconSun').classList.toggle('hidden', !isDark);
-            document.getElementById('themeIconMoon').classList.toggle('hidden', isDark);
-            if(window.unitChart) {
-                window.unitChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b';
-                window.unitChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b';
-                window.unitChart.options.scales.y.grid.color = isDark ? '#334155' : '#f1f5f9';
-                window.unitChart.options.plugins.tooltip.backgroundColor = isDark ? '#1e293b' : '#fff';
-                window.unitChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#0f172a';
-                window.unitChart.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#475569';
-                window.unitChart.update();
-            }
-            if(window.riskChart) {
-                window.riskChart.options.plugins.legend.labels.color = isDark ? '#94a3b8' : '#64748b';
-                window.riskChart.update();
-            }
-            if(window.unitCatChart) {
-                window.unitCatChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b';
-                window.unitCatChart.options.scales.x.grid.color = isDark ? '#334155' : '#f1f5f9';
-                window.unitCatChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b';
-                window.unitCatChart.update();
-            }
-        };
-        if(safeStorage.get('competency_theme') === 'dark') window.toggleTheme();
-
-        window.showTooltip = (e, text) => {
-            const tt = document.getElementById('globalTooltip');
-            tt.innerHTML = text;
-            tt.classList.remove('opacity-0');
-            tt.style.left = `${e.clientX}px`;
-            tt.style.top = `${e.clientY}px`;
-        };
-        window.hideTooltip = () => document.getElementById('globalTooltip').classList.add('opacity-0');
-
-        function animateValue(id, end, duration, suffix = "") {
-            const obj = document.getElementById(id);
-            if (!obj) return;
-            const start = parseInt(obj.textContent) || 0;
-            if(start === end) { obj.textContent = end + suffix; return; }
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                obj.textContent = Math.floor(progress * (end - start) + start) + suffix;
-                if (progress < 1) window.requestAnimationFrame(step);
-            };
-            window.requestAnimationFrame(step);
-        }
-
-        let modalCallback = null;
-        window.showModal = function(title, message, type = 'info', onConfirm = null) {
-            const modal = document.getElementById('customModal');
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalMessage').textContent = message;
-            
-            const icon = document.getElementById('modalIcon');
-            const btnCancel = document.getElementById('modalBtnCancel');
-            const btnConfirm = document.getElementById('modalBtnConfirm');
-
-            icon.className = "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 bg-blue-50 dark:bg-blue-900/30";
-            btnConfirm.className = "flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-colors";
-
-            if (type === 'error') {
-                icon.classList.add('bg-red-50', 'dark:bg-red-900/30'); icon.textContent = '❌';
-                btnConfirm.classList.add('bg-red-600', 'hover:bg-red-700');
-            } else if (type === 'success') {
-                icon.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30'); icon.textContent = '✅';
-                btnConfirm.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
-            } else if (type === 'confirm') {
-                icon.classList.add('bg-amber-50', 'dark:bg-amber-900/30'); icon.textContent = '⚠️';
-                btnConfirm.classList.add('bg-amber-600', 'hover:bg-amber-700');
-            } else {
-                icon.classList.add('bg-blue-50', 'dark:bg-blue-900/30'); icon.textContent = 'ℹ️';
-                btnConfirm.classList.add('bg-blue-600', 'hover:bg-blue-700');
-            }
-
-            if (type === 'confirm') {
-                btnCancel.classList.remove('hidden');
-                modalCallback = onConfirm;
-            } else {
-                btnCancel.classList.add('hidden');
-                modalCallback = null;
-            }
-
-            modal.classList.remove('hidden');
-        };
-
-        document.getElementById('modalBtnCancel').addEventListener('click', () => {
-            document.getElementById('customModal').classList.add('hidden');
-        });
-
-        document.getElementById('modalBtnConfirm').addEventListener('click', () => {
-            document.getElementById('customModal').classList.add('hidden');
-            if (modalCallback) modalCallback();
-        });
-
-        const VALIDITY_RULES = {
-            "RECOVERY": 12, "GENERAL": 12, "ENDOSCOPY ROOM": 12, "CONSENTS AND DISCHARGING": 12,
-            "ROOM COMPETENCIES": 12, "UPPER GI PROCEDURES": 6, "ASSISTING WITH EMERGENCY GI BLEEDS": 6,
-            "LOWER GI PROCEDURES": 6, "ERCP": 4, "DECONTAMINATION": 6, "JETS WORKFORCE": 12, "PRE-ASSESSMENT": 12,
-            "MANAGEMENT": 1200
-        };
-
-        let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" };
-        let appId = 'my-staff-tracker-v1';
-
-        if (typeof __firebase_config !== 'undefined') {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default';
-            } catch (e) { console.warn("Error parsing config", e); }
-        } else {
-            const urlParams = new URLSearchParams(window.location.search);
-            const magicConfig = urlParams.get('cfg');
-            if (magicConfig) {
-                try {
-                    const decoded = atob(magicConfig);
-                    const parsed = JSON.parse(decoded);
-                    if (parsed.apiKey && parsed.projectId) {
-                        safeStorage.set('competency_firebase_config', decoded);
-                        firebaseConfig = parsed;
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                    }
-                } catch(e) { console.error("Invalid Magic Link"); }
-            }
-            if (!firebaseConfig.apiKey) {
-                const savedConfig = safeStorage.get('competency_firebase_config');
-                if (savedConfig) {
-                    try { firebaseConfig = JSON.parse(savedConfig.trim().startsWith('{') ? savedConfig : `"${savedConfig}"`); } catch(e) {}
+                        csvContent += `"${profile.name}","${profile.band}","${tl}","${appDue}","${item.cat}","${item.skill}","${status}","${dateStr}"\n`; } }); });  const encodedUri = encodeURI(csvContent); const link = document.createElement("a"); link.setAttribute("href", encodedUri); link.setAttribute("download", "Endoscopy_Unit_Competency_Data.csv"); document.body.appendChild(link); link.click(); document.body.removeChild(link); };  window.toggleTheme = () => { const isDark = document.documentElement.classList.toggle('dark'); safeStorage.set('competency_theme', isDark ? 'dark' : 'light'); document.getElementById('themeIconSun').classList.toggle('hidden', !isDark); document.getElementById('themeIconMoon').classList.toggle('hidden', isDark); if(window.unitChart) { window.unitChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b'; window.unitChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b'; window.unitChart.options.scales.y.grid.color = isDark ? '#334155' : '#f1f5f9'; window.unitChart.options.plugins.tooltip.backgroundColor = isDark ? '#1e293b' : '#fff'; window.unitChart.options.plugins.tooltip.titleColor = isDark ? '#fff' : '#0f172a'; window.unitChart.options.plugins.tooltip.bodyColor = isDark ? '#cbd5e1' : '#475569'; window.unitChart.update(); } if(window.riskChart) { window.riskChart.options.plugins.legend.labels.color = isDark ? '#94a3b8' : '#64748b'; window.riskChart.update(); } if(window.unitCatChart) { window.unitCatChart.options.scales.x.ticks.color = isDark ? '#94a3b8' : '#64748b'; window.unitCatChart.options.scales.x.grid.color = isDark ? '#334155' : '#f1f5f9'; window.unitCatChart.options.scales.y.ticks.color = isDark ? '#94a3b8' : '#64748b'; window.unitCatChart.update(); } }; if(safeStorage.get('competency_theme') === 'dark') window.toggleTheme();  window.showTooltip = (e, text) => { const tt = document.getElementById('globalTooltip'); tt.innerHTML = text; tt.classList.remove('opacity-0'); tt.style.left = `${e.clientX}px`;
+            tt.style.top = `${e.clientY}px`; }; window.hideTooltip = () => document.getElementById('globalTooltip').classList.add('opacity-0');  function animateValue(id, end, duration, suffix = "") { const obj = document.getElementById(id); if (!obj) return; const start = parseInt(obj.textContent) \vert{}\vert{} 0; if(start === end) { obj.textContent = end + suffix; return; } let startTimestamp = null; const step = (timestamp) => { if (!startTimestamp) startTimestamp = timestamp; const progress = Math.min((timestamp - startTimestamp) / duration, 1); obj.textContent = Math.floor(progress * (end - start) + start) + suffix; if (progress < 1) window.requestAnimationFrame(step); }; window.requestAnimationFrame(step); }  let modalCallback = null; window.showModal = function(title, message, type = 'info', onConfirm = null) { const modal = document.getElementById('customModal'); document.getElementById('modalTitle').textContent = title; document.getElementById('modalMessage').textContent = message;  const icon = document.getElementById('modalIcon'); const btnCancel = document.getElementById('modalBtnCancel'); const btnConfirm = document.getElementById('modalBtnConfirm');  icon.className = "w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6 bg-blue-50 dark:bg-blue-900/30"; btnConfirm.className = "flex-1 py-3 text-white font-bold rounded-xl shadow-lg transition-colors";  if (type === 'error') { icon.classList.add('bg-red-50', 'dark:bg-red-900/30'); icon.textContent = '❌'; btnConfirm.classList.add('bg-red-600', 'hover:bg-red-700'); } else if (type === 'success') { icon.classList.add('bg-emerald-50', 'dark:bg-emerald-900/30'); icon.textContent = '✅'; btnConfirm.classList.add('bg-emerald-600', 'hover:bg-emerald-700'); } else if (type === 'confirm') { icon.classList.add('bg-amber-50', 'dark:bg-amber-900/30'); icon.textContent = '⚠️'; btnConfirm.classList.add('bg-amber-600', 'hover:bg-amber-700'); } else { icon.classList.add('bg-blue-50', 'dark:bg-blue-900/30'); icon.textContent = 'ℹ️'; btnConfirm.classList.add('bg-blue-600', 'hover:bg-blue-700'); }  if (type === 'confirm') { btnCancel.classList.remove('hidden'); modalCallback = onConfirm; } else { btnCancel.classList.add('hidden'); modalCallback = null; }  modal.classList.remove('hidden'); };  document.getElementById('modalBtnCancel').addEventListener('click', () => { document.getElementById('customModal').classList.add('hidden'); });  document.getElementById('modalBtnConfirm').addEventListener('click', () => { document.getElementById('customModal').classList.add('hidden'); if (modalCallback) modalCallback(); });  const VALIDITY_RULES = { "RECOVERY": 12, "GENERAL": 12, "ENDOSCOPY ROOM": 12, "CONSENTS AND DISCHARGING": 12, "ROOM COMPETENCIES": 12, "UPPER GI PROCEDURES": 6, "ASSISTING WITH EMERGENCY GI BLEEDS": 6, "LOWER GI PROCEDURES": 6, "ERCP": 4, "DECONTAMINATION": 6, "JETS WORKFORCE": 12, "PRE-ASSESSMENT": 12, "MANAGEMENT": 1200 };  let firebaseConfig = { apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: "", measurementId: "" }; let appId = 'my-staff-tracker-v1';  if (typeof __firebase_config !== 'undefined') { try { firebaseConfig = JSON.parse(__firebase_config); appId = typeof __app_id !== 'undefined' ? __app_id : 'competency-tracker-default'; } catch (e) { console.warn("Error parsing config", e); } } else { const urlParams = new URLSearchParams(window.location.search); const magicConfig = urlParams.get('cfg'); if (magicConfig) { try { const decoded = atob(magicConfig); const parsed = JSON.parse(decoded); if (parsed.apiKey && parsed.projectId) { safeStorage.set('competency_firebase_config', decoded); firebaseConfig = parsed; window.history.replaceState({}, document.title, window.location.pathname); } } catch(e) { console.error("Invalid Magic Link"); } } if (!firebaseConfig.apiKey) { const savedConfig = safeStorage.get('competency_firebase_config'); if (savedConfig) { try { firebaseConfig = JSON.parse(savedConfig.trim().startsWith('{') ? savedConfig : `"${savedConfig}"`); } catch(e) {}
                 }
             }
         }
@@ -731,8 +588,7 @@
                             <div class="flex flex-col p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
                                 <span class="text-xs font-black text-slate-800 dark:text-white leading-tight mb-1">${staff.name}</span>
                                 <div class="flex items-center justify-between mt-auto pt-1">
-                                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">${staff.band}</span>
-                                    ${staff.pill}
+                                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">${staff.band}</span>${staff.pill}
                                 </div>
                             </div>
                         `;
@@ -1108,4 +964,721 @@
 
             let isRowBased = false;
             let headerRowIndex = -1;
-            let nameCol = -1, bandCol = -
+            let nameCol = -1, bandCol = -1, pinCol = -1;
+
+            for (let i = 0; i < Math.min(rows.length, 5); i++) {
+                const r = rows[i].map(c => (c || "").trim().toLowerCase());
+                nameCol = r.findIndex(c => c === 'name' || c === 'staff name' || c === 'staff' || c === 'employee');
+                bandCol = r.findIndex(c => c === 'band' || c === 'grade' || c === 'role' || c === 'position' || c === 'title' || c === 'job title');
+                pinCol = r.findIndex(c => c === 'pin' || c === 'passcode' || c === 'password');
+                
+                if (nameCol !== -1) {
+                    isRowBased = true;
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if (isRowBased) {
+                // ROW BASED PARSING
+                const headerRow = rows[headerRowIndex];
+                const competencyCols = [];
+                
+                for (let j = 0; j < headerRow.length; j++) {
+                    if (j === nameCol || j === bandCol || j === pinCol) continue;
+                    const colName = (headerRow[j] || "").trim();
+                    if (!colName || colName.toLowerCase() === 'category heading' || colName.toLowerCase() === 'category') continue;
+                    
+                    let cat = "General";
+                    let skill = colName;
+                    
+                    if (colName.includes(":")) {
+                        const parts = colName.split(":");
+                        cat = parts[0].trim();
+                        skill = parts.slice(1).join(":").trim();
+                    }
+                    
+                    if (!window.state.categories.includes(cat)) window.state.categories.push(cat);
+                    competencyCols.push({ cat, skill, colIndex: j });
+                    window.state.skills.push({ cat, skill });
+                }
+
+                for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    let rawName = (row[nameCol] || "").trim();
+                    if (!rawName) continue;
+                    
+                    let bandVal = bandCol !== -1 ? (row[bandCol] || "").trim() : "";
+                    let pinVal = pinCol !== -1 ? (row[pinCol] || "").trim() : "1234";
+
+                    let cleanName = rawName;
+                    let extractedBand = normalizeBand(bandVal);
+
+                    if (!extractedBand || extractedBand === "N/A") {
+                        const match = cleanName.match(/^(.+?)(?:\s*[\(\[\-\/,\n\|–—:]\s*|\s+-\s+|\s+)(Band\s*\d+[a-z]?|B\d+|Grade\s*\d+[a-z]?|.*Charge Nurse.*|.*Sister.*|.*Manager.*|.*Matron.*)\s*[\)\]]?$/i);
+                        if (match) {
+                            cleanName = match[1].trim();
+                            extractedBand = normalizeBand(match[2].trim());
+                        }
+                    }
+
+                    if (!window.state.staffStore[cleanName]) {
+                        window.state.staffStore[cleanName] = { name: cleanName, band: extractedBand || "N/A", pin: pinVal || "1234", competencies: {} };
+                    }
+                    
+                    competencyCols.forEach(comp => {
+                        let val = (row[comp.colIndex] || "").trim();
+                        let valLower = val.toLowerCase();
+                        let status = "N/A";
+                        let dateAchieved = null;
+
+                        if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) status = "No"; 
+                        else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) status = "Yes";
+                        else if (val) {
+                            dateAchieved = parseDateString(val);
+                            if (dateAchieved) status = "Yes";
+                            else status = val;
+                        }
+                        window.state.staffStore[cleanName].competencies[comp.skill] = { status, date: dateAchieved, rawText: val };
+                    });
+                }
+            } else {
+                // COLUMN BASED PARSING
+                let headerIndex = -1;
+                for (let i = 0; i < Math.min(rows.length, 25); i++) {
+                    if (rows[i].slice(1).filter(c => c && c.trim() !== "").length >= 2) { 
+                        headerIndex = i; break; 
+                    }
+                }
+                if (headerIndex === -1) return;
+
+                const headerRow = rows[headerIndex]; 
+                const staffList = [];
+                let lastBand = "N/A";
+
+                for (let j = 1; j < headerRow.length; j++) { 
+                    let rawName = (headerRow[j] || "").trim();
+                    if (!rawName || rawName.toLowerCase() === 'category heading (optional)' || rawName.toLowerCase() === 'category heading' || rawName.toLowerCase() === 'true') continue;
+
+                    let extractedBand = null;
+                    let cleanName = rawName;
+                    
+                    const bandMatch = rawName.match(/^(.+?)(?:\s*[\(\[\-\/,\n\|–—:]\s*|\s+-\s+|\s+)(Band\s*\d+[a-z]?|B\d+|Grade\s*\d+[a-z]?|.*Charge Nurse.*|.*Sister.*|.*Manager.*|.*Matron.*)\s*[\)\]]?$/i);
+                    if (bandMatch) {
+                        cleanName = bandMatch[1].trim();
+                        extractedBand = normalizeBand(bandMatch[2].trim());
+                    }
+
+                    if (isPureExclusionHeader(rawName) || isPureExclusionHeader(cleanName)) {
+                        let pureBand = normalizeBand(extractedBand || rawName);
+                        if (pureBand && pureBand.toLowerCase() !== 'band' && pureBand.toLowerCase() !== 'grade') {
+                            lastBand = pureBand;
+                        }
+                        continue; 
+                    }
+
+                    const finalBand = extractedBand || lastBand;
+                    staffList.push({ name: cleanName, colIndex: j, band: finalBand });
+                    window.state.staffStore[cleanName] = { name: cleanName, band: finalBand, pin: "1234", competencies: {} };
+                }
+
+                let currentCategory = "General";
+                for (let i = headerIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const labelA = (row[0] || "").trim();
+                    const labelB = (row[1] || "").trim();
+                    const itemLabel = labelA || labelB; 
+                    
+                    if (!itemLabel) continue;
+
+                    if (itemLabel.toUpperCase() === "PIN" || itemLabel.toUpperCase() === "PASSCODE" || itemLabel.toUpperCase() === "PASSWORD") {
+                        staffList.forEach(staff => {
+                            const pinVal = (row[staff.colIndex] || "").trim();
+                            if (pinVal) window.state.staffStore[staff.name].pin = pinVal;
+                        });
+                        continue; 
+                    }
+
+                    if (["BAND", "GRADE", "ROLE", "POSITION", "TITLE"].includes(itemLabel.toUpperCase())) {
+                        staffList.forEach(staff => {
+                            const bandVal = (row[staff.colIndex] || "").trim();
+                            if (bandVal) {
+                                const norm = normalizeBand(bandVal);
+                                staff.band = norm;
+                                if (window.state.staffStore[staff.name]) {
+                                    window.state.staffStore[staff.name].band = norm;
+                                }
+                            }
+                        });
+                        continue;
+                    }
+
+                    const hasDataInRow = staffList.some(s => {
+                        const val = (row[s.colIndex] || "").trim();
+                        if (['yes','no','y','n','true','false','1','0','✅','❌'].includes(val.toLowerCase())) return true;
+                        if (parseDateString(val)) return true;
+                        return false;
+                    });
+
+                    const hasCategoryCol = (headerRow[1] || "").toLowerCase().includes("category heading");
+                    const isKnownCat = Object.keys(VALIDITY_RULES).includes(itemLabel.toUpperCase());
+                    const isAllCaps = itemLabel === itemLabel.toUpperCase() && /[A-Z]/.test(itemLabel);
+
+                    if (hasCategoryCol) {
+                        if (labelB.toUpperCase() === "TRUE") {
+                            currentCategory = labelA || itemLabel;
+                            if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                            continue;
+                        }
+                    } else {
+                        if (!hasDataInRow && itemLabel.length > 2 && (isKnownCat || isAllCaps)) {
+                            currentCategory = itemLabel;
+                            if (!window.state.categories.includes(currentCategory)) window.state.categories.push(currentCategory);
+                            continue;
+                        }
+                    }
+
+                    window.state.skills.push({ cat: currentCategory, skill: itemLabel });
+                    
+                    staffList.forEach(staff => {
+                        let val = (row[staff.colIndex] || "").trim();
+                        let valLower = val.toLowerCase();
+                        let status = "N/A";
+                        let dateAchieved = null;
+
+                        if (!val || ['no', 'n', 'false', '❌', '0', 'failed'].includes(valLower)) {
+                            status = "No"; 
+                        } else if (['yes', 'y', 'true', '✅', '1', 'passed'].includes(valLower)) {
+                            status = "Yes";
+                        } else if (val) {
+                            dateAchieved = parseDateString(val);
+                            if (dateAchieved) status = "Yes";
+                            else status = val;
+                        }
+                        window.state.staffStore[staff.name].competencies[itemLabel] = { status, date: dateAchieved, rawText: val };
+                    });
+                }
+            }
+
+            populateSelectors();
+            document.getElementById('loader')?.classList.add('hidden');
+            document.getElementById('setupPanel')?.classList.add('hidden');
+            document.getElementById('appStatusMsg')?.classList.add('hidden');
+            document.getElementById('mainContent')?.classList.remove('hidden');
+
+            const savedSession = safeStorage.get('competency_access_session');
+            if (savedSession) {
+                try {
+                    const session = JSON.parse(savedSession);
+                    if (session.type === 'staff') window.validatePasscode('staff', session.pin, session.name, true);
+                } catch(e) {}
+            }
+        }
+
+        function populateSelectors() {
+            const select = document.getElementById('staffSelect');
+            if (select) {
+                const currentSelected = select.value;
+                select.innerHTML = '<option value="">-- Unit Overview --</option>';
+                
+                const staffByBand = {};
+                Object.values(window.state.staffStore).forEach(s => {
+                    if (!staffByBand[s.band]) staffByBand[s.band] = [];
+                    staffByBand[s.band].push(s);
+                });
+
+                Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
+                    const group = document.createElement('optgroup'); group.label = band;
+                    staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
+                        const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; 
+                        group.appendChild(opt);
+                    });
+                    select.appendChild(group);
+                });
+
+                if (currentSelected && window.state.staffStore[currentSelected]) {
+                    select.value = currentSelected; updateDisplay();
+                }
+            }
+
+            const loginSelect = document.getElementById('loginNameSelect');
+            if(loginSelect) {
+                loginSelect.innerHTML = '<option value="">-- Select Your Name --</option>';
+                const staffByBand = {};
+                Object.values(window.state.staffStore).forEach(s => {
+                    if (!staffByBand[s.band]) staffByBand[s.band] = [];
+                    staffByBand[s.band].push(s);
+                });
+                Object.keys(staffByBand).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })).forEach(band => {
+                    const group = document.createElement('optgroup'); group.label = band;
+                    staffByBand[band].sort((a,b) => a.name.localeCompare(b.name)).forEach(s => {
+                        const opt = document.createElement('option'); opt.value = s.name; opt.textContent = s.name; group.appendChild(opt);
+                    });
+                    loginSelect.appendChild(group);
+                });
+            }
+
+            // Populate Competency Search Datalist
+            const compList = document.getElementById('competenciesList');
+            if (compList) {
+                compList.innerHTML = '';
+                const sortedSkills = window.state.skills
+                    .filter(item => !['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase()))
+                    .map(item => item.skill)
+                    .sort((a, b) => a.localeCompare(b));
+                
+                const uniqueSkills = [...new Set(sortedSkills)];
+                uniqueSkills.forEach(skill => {
+                    const opt = document.createElement('option');
+                    opt.value = skill;
+                    compList.appendChild(opt);
+                });
+            }
+        }
+
+        window.applyFilters = () => {
+            const searchInput = document.getElementById('staffSearchInput');
+            const staffSelect = document.getElementById('staffSelect');
+
+            const term = searchInput ? searchInput.value.toLowerCase() : '';
+
+            // Filter Top Dropdown
+            if (staffSelect) {
+                const options = staffSelect.querySelectorAll('option, optgroup');
+                options.forEach(opt => {
+                    if (opt.tagName === 'OPTGROUP') {
+                        let has = false;
+                        opt.querySelectorAll('option').forEach(c => {
+                            const nameMatch = c.textContent.toLowerCase().includes(term);
+                            const v = nameMatch;
+                            
+                            c.style.display = v ? '' : 'none'; 
+                            if (v) has = true;
+                        });
+                        opt.style.display = has ? '' : 'none';
+                    } else if (opt.value === "") { opt.style.display = ''; }
+                });
+            }
+
+            // Filter Table (if unit dashboard is visible)
+            const tbody = document.getElementById('unitStaffTableBody');
+            if (tbody) {
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(tr => {
+                    const nameCell = tr.querySelector('td:nth-child(1)');
+                    const nameMatch = nameCell && nameCell.textContent.toLowerCase().includes(term);
+                    
+                    if (nameMatch) tr.style.display = '';
+                    else tr.style.display = 'none';
+                });
+            }
+        };
+
+        function getExpiryDate(achievedDate, categoryName) {
+            const defaultMonths = 12;
+            const catUpper = categoryName.toUpperCase();
+            const ruleMonths = VALIDITY_RULES[catUpper] || defaultMonths;
+            
+            const expiry = new Date(achievedDate);
+            expiry.setMonth(expiry.getMonth() + ruleMonths);
+            return expiry;
+        }
+
+        window.updateDisplay = function() {
+            const name = document.getElementById('staffSelect').value;
+            const staffDash = document.getElementById('staffDashboard');
+            const unitDash = document.getElementById('unitDashboard');
+            
+            if (!name) {
+                if (staffDash) staffDash.classList.add('hidden');
+                if (unitDash) unitDash.classList.remove('hidden');
+                if (window.state.accessLevel === 'admin') renderUnitDashboard();
+                return;
+            }
+
+            if (unitDash) unitDash.classList.add('hidden');
+            if (staffDash) staffDash.classList.remove('hidden');
+
+            const profile = window.state.staffStore[name];
+            if(!profile) return;
+
+            updateText('displayName', profile.name);
+            updateText('displayBand', profile.band);
+
+            // Populate Appraisal Banner
+            const appraiser = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || "Unassigned";
+            let appDueDateStr = "No Date Set";
+            const appDue = profile.competencies['Appraisal Due Date'];
+            if (appDue && appDue.date) appDueDateStr = appDue.date.toLocaleDateString('en-GB');
+            else if (appDue && appDue.rawText) appDueDateStr = appDue.rawText;
+
+            let rawGoalText = profile.competencies['Appraisal Goal']?.rawText || "No goal set";
+            if (rawGoalText !== "No goal set" && rawGoalText !== "N/A" && rawGoalText !== "No" && rawGoalText.trim() !== '') {
+                const goalItems = rawGoalText.split('\n').filter(g => g.trim() !== '');
+                const formattedGoals = `<ul class="list-disc pl-5 mt-2 space-y-1 text-sm font-medium text-slate-700 dark:text-slate-200">
+                    ${goalItems.map(g => `<li>${g.trim()}</li>`).join('')}
+                </ul>`;
+                document.getElementById('displayAppraisalGoal').innerHTML = formattedGoals;
+            } else {
+                document.getElementById('displayAppraisalGoal').innerHTML = "<span class='text-slate-400 italic text-sm mt-2 block'>No goal recorded in database</span>";
+            }
+            updateText('displayAppraisalDate', appDueDateStr);
+            updateText('displayAppraiser', appraiser);
+
+            // Remove hidden class from banner
+            document.getElementById('appraisalBanner').classList.remove('hidden');
+            
+            let countValid = 0, countExpiring = 0, countAction = 0, totalApplicable = 0;
+            const today = new Date();
+            const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
+
+            const categoryData = {};
+            window.state.categories.forEach(cat => categoryData[cat] = { total: 0, valid: 0, skills: [] });
+
+            const timelineItems = []; 
+            let unitTotalSkills = 0; let unitValidSkills = 0;
+
+            Object.values(window.state.staffStore).forEach(p => {
+                window.state.skills.forEach(item => {
+                    const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                    if (isMeta) return;
+
+                    const cd = p.competencies[item.skill] || { status: "N/A", date: null };
+                    unitTotalSkills++;
+                    if (cd.status === "Yes" && (!cd.date || getExpiryDate(cd.date, item.cat) >= today)) {
+                        unitValidSkills++;
+                    }
+                });
+            });
+            const unitAvg = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
+
+            window.state.skills.forEach(item => {
+                const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                if (isMeta) return;
+
+                if(!categoryData[item.cat]) categoryData[item.cat] = { total: 0, valid: 0, skills: [] };
+                categoryData[item.cat].total++;
+                totalApplicable++;
+
+                const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+                let statusObj = { name: item.skill, status: 'missing', date: null };
+
+                if (compData.status === "Yes") {
+                    if (compData.date) {
+                        const expiry = getExpiryDate(compData.date, item.cat);
+                        statusObj.date = expiry;
+                        if (expiry < today) {
+                            statusObj.status = 'expired';
+                            countAction++;
+                        } else if (expiry <= sixtyDaysFromNow) {
+                            statusObj.status = 'expiring';
+                            countExpiring++;
+                            categoryData[item.cat].valid++;
+                        } else {
+                            statusObj.status = 'valid';
+                            countValid++;
+                            categoryData[item.cat].valid++;
+                        }
+                    } else {
+                        statusObj.status = 'valid';
+                        countValid++;
+                        categoryData[item.cat].valid++;
+                    }
+                } else {
+                    countAction++;
+                }
+                
+                if (statusObj.date && (statusObj.status === 'valid' || statusObj.status === 'expiring')) {
+                    const daysUntil = Math.ceil((statusObj.date - today) / (1000 * 60 * 60 * 24));
+                    if (daysUntil > 0 && daysUntil <= 90) {
+                        timelineItems.push({ name: item.skill, days: daysUntil, date: statusObj.date });
+                    }
+                }
+
+                categoryData[item.cat].skills.push(statusObj);
+            });
+
+            animateValue('staffCountValid', countValid, 800);
+            animateValue('staffCountExpiring', countExpiring, 800);
+            animateValue('staffCountAction', countAction, 800);
+
+            const compliancePct = totalApplicable > 0 ? Math.round((countValid / totalApplicable) * 100) : 0;
+            animateValue('staffOverallPercent', compliancePct, 1200, '%');
+            
+            const donut = document.getElementById('staffOverallDonut');
+            donut.setAttribute('stroke-dasharray', `${compliancePct}, 100`);
+            donut.classList.remove('text-blue-600', 'text-emerald-500', 'text-amber-500', 'text-red-500');
+            
+            const txtEl = document.getElementById('staffOverallText');
+            if(compliancePct > 80) { 
+                txtEl.textContent = "Up-to-date"; 
+                txtEl.className = "text-sm font-black text-emerald-600 dark:text-emerald-400 block"; 
+                donut.classList.add('text-emerald-500'); 
+            }
+            else if(compliancePct >= 40) { 
+                txtEl.textContent = "Needs Attention"; 
+                txtEl.className = "text-sm font-black text-amber-500 block"; 
+                donut.classList.add('text-amber-500'); 
+            }
+            else { 
+                txtEl.textContent = "Action Required"; 
+                txtEl.className = "text-sm font-black text-red-600 dark:text-red-400 block"; 
+                donut.classList.add('text-red-500'); 
+            }
+
+            const diff = compliancePct - unitAvg;
+            const diffText = diff >= 0 ? `+${diff}\%` : `${diff}%`;
+            const diffClass = diff >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400';
+            const benchmarkEl = document.getElementById('staffBenchmark');
+            if (benchmarkEl) benchmarkEl.innerHTML = `Unit Avg: ${unitAvg}% <span class="font-black ${diffClass} ml-1">(${diffText})</span>`;
+
+            const tlContainer = document.getElementById('timelineContainer');
+            const tlGrid = document.getElementById('staffTimelineGrid');
+            if (tlContainer && tlGrid) {
+                if (timelineItems.length > 0) {
+                    tlContainer.classList.remove('hidden');
+                    tlGrid.innerHTML = '';
+                    timelineItems.sort((a,b) => a.days - b.days).forEach(ti => {
+                        let colorClass = ti.days <= 30 ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800/50' : (ti.days <= 60 ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800/50' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/50');
+                        tlGrid.insertAdjacentHTML('beforeend', `
+                            <div class="p-3 rounded-xl border ${colorClass} flex flex-col justify-center">
+                                <span class="text-[9px] font-black uppercase tracking-widest opacity-80 mb-0.5">In ${ti.days} Days</span>
+                                <span class="text-xs font-bold leading-tight truncate" title="${ti.name}">${ti.name}</span>
+                            </div>
+                        `);
+                    });
+                } else {
+                    tlContainer.classList.add('hidden');
+                }
+            }
+
+            const grid = document.getElementById('categoryGrid');
+            const chartContent = document.getElementById('staffCategoryChartContent');
+            const chartContainer = document.getElementById('staffCategoryChart');
+            
+            grid.innerHTML = '';
+            if (chartContent) chartContent.innerHTML = '';
+            let hasCatData = false;
+
+            Object.keys(categoryData).forEach(catName => {
+                const cat = categoryData[catName];
+                if (cat.total === 0) return;
+                hasCatData = true;
+                
+                const catPct = Math.round((cat.valid / cat.total) * 100);
+                let donutColor = catPct > 80 ? 'text-emerald-500' : (catPct >= 40 ? 'text-amber-500' : 'text-red-500');
+
+                let countV = 0, countE = 0, countM = 0;
+                let skillsHtml = '';
+                
+                cat.skills.forEach(sk => {
+                    if (sk.status === 'valid') countV++;
+                    else if (sk.status === 'expiring') countE++;
+                    else countM++;
+
+                    if (window.state.focusMode && sk.status === 'valid') return;
+
+                    let pill = '';
+                    if (sk.status === 'valid') {
+                        const dateStr = sk.date ? sk.date.toLocaleDateString('en-GB') : 'No Expiry';
+                        pill = `<span class="px-2 py-1 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid until ${dateStr}</span>`;
+                    }
+                    else if (sk.status === 'expiring') pill = `<span class="px-2 py-1 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[9px] font-black tracking-wider uppercase border border-amber-300 dark:border-amber-800">Expiring ${sk.date ? sk.date.toLocaleDateString('en-GB') : ''}</span>`;
+                    else if (sk.status === 'expired') pill = `<span class="px-2 py-1 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[9px] font-black tracking-wider uppercase border border-red-300 dark:border-red-800">Expired</span>`;
+                    else pill = `<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 text-[9px] font-black tracking-wider uppercase border border-slate-200 dark:border-slate-600">Action Required</span>`;
+
+                    skillsHtml += `
+                        <div class="py-2.5 border-b border-slate-100 dark:border-slate-700 last:border-0 flex justify-between items-start gap-4 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors px-1 rounded-lg">
+                            <span class="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-tight flex-1 pt-0.5">${sk.name}</span>
+                            <div class="flex-shrink-0">${pill}</div>
+                        </div>
+                    `;
+                });
+
+                if (window.state.focusMode && skillsHtml === '') return;
+
+                const vPct = (countV/cat.total)*100;
+                const ePct = (countE/cat.total)*100;
+                const mPct = (countM/cat.total)*100;
+
+                const actionSkills = cat.skills.filter(sk => sk.status === 'expired' || sk.status === 'missing').map(sk => sk.name);
+                const actionTooltipText = actionSkills.length > 0 ? `Action Needed:<br/>- ` + actionSkills.join('<br/>- ') : 'All compliant';
+                const safeTooltip = actionTooltipText.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+                if (chartContent) {
+                    chartContent.insertAdjacentHTML('beforeend', `
+                        <div class="flex items-center gap-4 text-sm group">
+                            <div class="w-1/3 md:w-1/4 font-bold text-slate-700 dark:text-slate-300 truncate text-xs group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" title="${catName}">${catName}</div>
+                            <div class="flex-1 flex items-center gap-3">
+                                <div class="flex-1 h-3.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden flex shadow-inner cursor-crosshair">
+                                    <div class="bg-emerald-500 hover:brightness-110 transition-all duration-1000" style="width: ${vPct}\%" onmousemove="showTooltip(event, '${countV} Valid')" onmouseleave="hideTooltip()"></div>
+                                    <div class="bg-amber-400 hover:brightness-110 transition-all duration-1000" style="width: ${ePct}\%" onmousemove="showTooltip(event, '${countE} Expiring')" onmouseleave="hideTooltip()"></div>
+                                    <div class="bg-red-500 hover:brightness-110 transition-all duration-1000" style="width: ${mPct}\%" onmousemove="showTooltip(event, '${safeTooltip}')" onmouseleave="hideTooltip()"></div>
+                                </div>
+                                <div class="w-10 text-right font-black text-slate-800 dark:text-slate-200 text-xs">${catPct}%</div>
+                            </div>
+                        </div>
+                    `);
+                }
+
+                const cardHtml = `
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col print-break hover:shadow-lg transition-shadow duration-300">
+                        <div class="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50 flex justify-between items-center">
+                            <div class="flex items-center gap-4">
+                                <div class="relative w-11 h-11 flex-shrink-0">
+                                    <svg viewBox="0 0 36 36" class="w-full h-full drop-shadow-sm">
+                                        <path class="text-slate-200 dark:text-slate-700" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        <path class="${donutColor} donut-ring" stroke-dasharray="${catPct}, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    </svg>
+                                    <div class="absolute inset-0 flex items-center justify-center"><span class="text-[9px] font-black text-slate-800 dark:text-white">${catPct}%</span></div>
+                                </div>
+                                <div>
+                                    <h4 class="font-black text-slate-800 dark:text-white text-sm tracking-wide uppercase leading-tight">${catName}</h4>
+                                    <span class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">${cat.valid}/${cat.total} Compliant</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-5 pt-4 pb-2">
+                            <div class="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 mb-1.5 overflow-hidden flex shadow-inner">
+                                <div class="bg-emerald-500 h-2 transition-all duration-1000" style="width: ${vPct}%" title="Valid"></div>
+                                <div class="bg-amber-400 h-2 transition-all duration-1000" style="width: ${ePct}%" title="Expiring"></div>
+                                <div class="bg-red-500 h-2 transition-all duration-1000" style="width: ${mPct}%" title="Missing"></div>
+                            </div>
+                        </div>
+                        <div class="p-5 pt-0 overflow-y-auto max-h-64 custom-scroll flex-1">
+                            ${skillsHtml}
+                        </div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', cardHtml);
+            });
+            
+            if (chartContainer) {
+                if (hasCatData) chartContainer.classList.remove('hidden');
+                else chartContainer.classList.add('hidden');
+            }
+        }
+
+        function renderUnitDashboard() {
+            const today = new Date();
+            const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(today.getDate() - 30);
+            const sixtyDaysFromNow = new Date(); sixtyDaysFromNow.setDate(today.getDate() + 60);
+            const thirtyDaysFromNow = new Date(); thirtyDaysFromNow.setDate(today.getDate() + 30);
+
+            let totalStaff = 0;
+            let unitTotalSkills = 0, unitValidSkills = 0, unitExpiring = 0, unitExpiredMissing = 0;
+            let staffCompliant = 0, staffAttention = 0, staffNonCompliant = 0;
+            let appraisalsOverdue = 0, appraisalsUpcoming = 0;
+
+            const unitCatData = {};
+            window.state.categories.forEach(cat => unitCatData[cat] = { valid: 0, total: 0 });
+
+            const staffList = [];
+            const recentAchievements = [];
+
+            Object.values(window.state.staffStore).forEach(profile => {
+                totalStaff++;
+                let sTotal = 0, sValid = 0, sExpiring = 0, sAction = 0;
+
+                // Handle Appraisal Logic
+                const appDue = profile.competencies['Appraisal Due Date'];
+                let appStatusStr = `<span class="text-emerald-500 font-bold">Valid</span>`;
+                if (appDue && appDue.date) {
+                    if (appDue.date < today) {
+                        appraisalsOverdue++;
+                        appStatusStr = `<span class="px-2 py-0.5 bg-rose-100 text-rose-700 rounded text-[10px] font-black uppercase">Overdue</span>`;
+                    } else if (appDue.date <= thirtyDaysFromNow) {
+                        appraisalsUpcoming++;
+                        appStatusStr = `<span class="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-black uppercase">Due Soon</span>`;
+                    } else {
+                        appStatusStr = `<span class="text-slate-400 text-xs">${appDue.date.toLocaleDateString('en-GB')}</span>`;
+                    }
+                } else {
+                    appStatusStr = `<span class="text-slate-300">-</span>`;
+                }
+
+                const tl = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || "Unassigned";
+
+                window.state.skills.forEach(item => {
+                    const isMeta = ['appraisal due date', 'appraiser', 'appraisal goal', 'appraiser/ team leader'].includes(item.skill.toLowerCase());
+                    const compData = profile.competencies[item.skill] || { status: "N/A", date: null };
+                    
+                    if (!isMeta) {
+                        sTotal++;
+                        if(unitCatData[item.cat]) unitCatData[item.cat].total++;
+                        
+                        if (compData.status === "Yes") {
+                            if (compData.date) {
+                                const expiryDate = getExpiryDate(compData.date, item.cat);
+                                if (expiryDate < today) sAction++;
+                                else if (expiryDate <= sixtyDaysFromNow) { sExpiring++; if(unitCatData[item.cat]) unitCatData[item.cat].valid++; }
+                                else { sValid++; if(unitCatData[item.cat]) unitCatData[item.cat].valid++; }
+                            } else { 
+                                sValid++; 
+                                if(unitCatData[item.cat]) unitCatData[item.cat].valid++;
+                            }
+                        } else {
+                            sAction++;
+                        }
+                    }
+
+                    // Handle Recent Achievements
+                    if (!isMeta && compData.status === "Yes" && compData.date && compData.date >= thirtyDaysAgo && compData.date <= today) {
+                        recentAchievements.push({ name: profile.name, band: profile.band, skill: item.skill, date: compData.date });
+                    }
+                });
+
+                unitTotalSkills += sTotal;
+                unitValidSkills += sValid;
+                unitExpiring += sExpiring;
+                unitExpiredMissing += sAction;
+
+                const compPct = sTotal > 0 ? Math.round((sValid/sTotal)*100) : 0;
+                if (compPct > 80) staffCompliant++;
+                else if (compPct >= 40) staffAttention++;
+                else staffNonCompliant++;
+
+                staffList.push({ name: profile.name, band: profile.band, tl: tl, appStatusStr: appStatusStr, pct: compPct, expiring: sExpiring, action: sAction });
+            });
+
+            updateText('unitTotalStaff', totalStaff + " Staff Members");
+            animateValue('unitExpiringCount', unitExpiring, 800);
+            animateValue('unitExpiredCount', unitExpiredMissing, 800);
+            animateValue('unitAppraisalsOverdue', appraisalsOverdue, 800);
+            animateValue('unitAppraisalsUpcoming', appraisalsUpcoming, 800);
+
+            const unitPct = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
+            animateValue('unitOverallPercent', unitPct, 1200, '%');
+            document.getElementById('unitOverallDonut').setAttribute('stroke-dasharray', `${unitPct}, 100`);
+            
+            drawUnitTrendChart();
+            drawRiskChart(staffCompliant, staffAttention, staffNonCompliant);
+            drawUnitCategoryChart(unitCatData);
+
+            // Render Achievements
+            recentAchievements.sort((a, b) => b.date - a.date);
+            const achievementsGrid = document.getElementById('recentAchievementsGrid');
+            const noAchievementsMsg = document.getElementById('noAchievementsMsg');
+            const toggleBtn = document.getElementById('achievementsToggleBtn');
+            
+            if (achievementsGrid && noAchievementsMsg) {
+                achievementsGrid.innerHTML = '';
+                if (recentAchievements.length > 0) {
+                    noAchievementsMsg.classList.add('hidden');
+                    achievementsGrid.classList.remove('hidden');
+                    
+                    if (toggleBtn) {
+                        if (recentAchievements.length > 3) toggleBtn.classList.remove('hidden');
+                        else toggleBtn.classList.add('hidden');
+                    }
+
+                    recentAchievements.forEach((ach, index) => {
+                        const dateStr = ach.date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                        const hiddenClass = (!window.state.achievementsExpanded && index >= 3) ? 'hidden' : '';
+                        
+                        achievementsGrid.insertAdjacentHTML('beforeend', `
+                            <div class="achievement-card ${hiddenClass} flex items-start gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-100 to-amber-200 dark:from-yellow-900/40 dark:to-amber-700/40 flex items-center justify-center text-xl shadow-sm flex-shrink-0 border border-yellow-200 dark:border-amber-800">🏆</div>
+                                <div>
+                                    <h4 class="text-sm font-black text-slate-800 dark:text-white leading-tight">${ach.name}</h4>
+                                    <p class="text-[10px] font-bold
