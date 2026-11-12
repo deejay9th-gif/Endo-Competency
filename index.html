@@ -126,4 +126,285 @@
                 </button>
                 <button onclick="toggleTheme()" class="w-12 h-12 flex items-center justify-center rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-all">
                     <svg id="themeIconSun" class="w-5 h-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                    <svg id="themeIconMoon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 00
+                    <svg id="themeIconMoon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                </button>
+                <button id="headerUploadBtn" onclick="document.getElementById('adminPanel').classList.remove('hidden'); document.getElementById('adminPanel').scrollIntoView({behavior:'smooth'})" class="hidden px-6 py-3.5 bg-slate-900 dark:bg-blue-600 text-white text-xs font-black rounded-xl shadow-lg hover:bg-black dark:hover:bg-blue-700 uppercase tracking-wider transition-all flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                    Update Database
+                </button>
+            </div>
+        </header>
+
+        <!-- Status & Loading -->
+        <div id="appStatusMsg" class="hidden bg-white dark:bg-slate-800 p-12 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 text-center fade-in">
+            <div class="w-16 h-16 bg-slate-50 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-6">📂</div>
+            <h2 class="text-xl font-black text-slate-900 dark:text-white mb-2">Notice</h2>
+            <p id="statusText" class="text-slate-500 dark:text-slate-400 text-sm max-w-sm mx-auto">Connecting...</p>
+        </div>
+
+        <div id="setupPanel" class="hidden bg-white dark:bg-slate-800 p-12 rounded-[2rem] shadow-xl border border-slate-100 dark:border-slate-700 text-center fade-in">
+            <h2 class="text-2xl font-black text-slate-900 dark:text-white mb-2">Empty Database</h2>
+            <p class="text-slate-500 dark:text-slate-400 mb-8 max-w-sm mx-auto">Upload a CSV file to start tracking records.</p>
+            <button onclick="document.getElementById('adminPanel').classList.remove('hidden')" class="bg-slate-900 dark:bg-blue-600 text-white px-10 py-4 rounded-2xl font-black hover:bg-black dark:hover:bg-blue-700 transition-all shadow-xl">Open Admin Tool</button>
+        </div>
+
+        <!-- Animated Skeleton Loader -->
+        <div id="loader" class="py-12 w-full max-w-5xl mx-auto flex flex-col gap-6 fade-in">
+            <div class="h-8 bg-slate-200 dark:bg-slate-700 rounded-lg w-1/4 animate-pulse mb-4"></div>
+            <div class="flex gap-6 animate-pulse flex-col md:flex-row">
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+                <div class="h-32 bg-slate-200 dark:bg-slate-700 rounded-[2rem] flex-1 shadow-sm"></div>
+            </div>
+            <div class="h-[400px] bg-slate-200 dark:bg-slate-700 rounded-[2rem] animate-pulse shadow-sm mt-4"></div>
+        </div>
+
+        <div id="mainContent" class="hidden fade-in">
+            
+            <!-- Controls (Search/Filter) -->
+            <div class="bg-white dark:bg-slate-800 p-2 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-2 mb-8 no-print max-w-3xl">
+                <div id="staffSearchDiv" class="flex-1 flex flex-col sm:flex-row relative">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </div>
+                    <input type="text" id="staffSearchInput" oninput="applyFilters()" placeholder="Search staff..." class="pl-10 p-4 bg-transparent outline-none text-sm font-semibold w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-700 dark:text-white" />
+                    
+                    <select id="staffSelect" onchange="updateDisplay()" class="w-full sm:w-64 p-4 bg-transparent font-black text-slate-800 dark:text-white outline-none tracking-wide cursor-pointer appearance-none">
+                        <option value="">-- Unit Overview --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- UNIT DASHBOARD -->
+            <div id="unitDashboard" class="hidden">
+                <div class="mb-6"><h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Unit Performance Overview</h2><p class="text-slate-500 dark:text-slate-400 text-sm">High-level compliance statistics across all staff.</p></div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <!-- Unit Total Compliance -->
+                    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-6 relative overflow-hidden">
+                        <div class="absolute -right-4 -top-4 w-24 h-24 bg-blue-50 dark:bg-blue-900/20 rounded-full opacity-50 pointer-events-none"></div>
+                        <div class="relative w-24 h-24">
+                            <svg viewBox="0 0 36 36" class="w-full h-full">
+                                <path class="text-slate-100 dark:text-slate-700" stroke-width="3" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                <path id="unitOverallDonut" class="text-blue-600 dark:text-blue-500 donut-ring" stroke-dasharray="0, 100" stroke-width="3" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center flex-col">
+                                <span id="unitOverallPercent" class="text-xl font-black text-slate-800 dark:text-white">0%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-1">Total Unit Compliance</h3>
+                            <p class="text-2xl font-black text-slate-800 dark:text-white" id="unitTotalStaff">0 Staff</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Unit Expiring Soon -->
+                    <div class="bg-amber-50 rounded-3xl p-6 shadow-sm border border-amber-100 flex flex-col justify-center relative overflow-hidden dark:bg-amber-900/20 dark:border-amber-900/50">
+                        <div class="absolute -right-4 -bottom-4 text-amber-200 opacity-30 dark:opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-amber-600 mb-1 z-10 dark:text-amber-400">Expiring Soon</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitExpiringCount" class="text-4xl font-black text-amber-700 leading-none dark:text-amber-300">0</span>
+                            <span class="text-xs font-bold text-amber-600/80 mb-1 dark:text-amber-400/80">Competencies</span>
+                        </div>
+                    </div>
+
+                    <!-- Expired / Missing -->
+                    <div class="bg-red-50 rounded-3xl p-6 shadow-sm border border-red-100 flex flex-col justify-center relative overflow-hidden dark:bg-red-900/20 dark:border-red-900/50">
+                        <div class="absolute -right-4 -bottom-4 text-red-200 opacity-30 dark:opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        </div>
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-red-600 mb-1 z-10 dark:text-red-400">Expired / Missing</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitExpiredCount" class="text-4xl font-black text-red-700 leading-none dark:text-red-300">0</span>
+                            <span class="text-xs font-bold text-red-600/80 mb-1 dark:text-red-400/80">Competencies</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Appraisals Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    <!-- Overdue Appraisals -->
+                    <div class="bg-rose-50 rounded-3xl p-6 shadow-sm border border-rose-200 flex flex-col justify-center relative overflow-hidden dark:bg-rose-900/20 dark:border-rose-900/50">
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-rose-600 mb-1 z-10 dark:text-rose-400">Overdue Appraisals</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitAppraisalsOverdue" class="text-4xl font-black text-rose-700 leading-none dark:text-rose-300">0</span>
+                            <span class="text-xs font-bold text-rose-600/80 mb-1 dark:text-rose-400/80">Staff</span>
+                        </div>
+                    </div>
+                    <!-- Upcoming Appraisals -->
+                    <div class="bg-orange-50 rounded-3xl p-6 shadow-sm border border-orange-200 flex flex-col justify-center relative overflow-hidden dark:bg-orange-900/20 dark:border-orange-900/50">
+                        <h3 class="text-[10px] uppercase tracking-widest font-black text-orange-600 mb-1 z-10 dark:text-orange-400">Appraisals Due (30 Days)</h3>
+                        <div class="flex items-end gap-3 z-10">
+                            <span id="unitAppraisalsUpcoming" class="text-4xl font-black text-orange-700 leading-none dark:text-orange-300">0</span>
+                            <span class="text-xs font-bold text-orange-600/80 mb-1 dark:text-orange-400/80">Staff</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unit Historic Trend Chart (Admin Only) -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8 p-8 print-break transition-colors">
+                    <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Compliance Trend</h3>
+                    <div class="w-full h-72 relative">
+                        <canvas id="unitTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Analytics Row: Risk & Categories -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <!-- Staff Risk Breakdown -->
+                    <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-8 print-break">
+                        <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1">Staff Risk Profile</h3>
+                        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-6">Staff grouped by completion %</p>
+                        <div class="w-full h-64 relative">
+                            <canvas id="staffRiskChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Category Performance -->
+                    <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-8 print-break lg:col-span-2">
+                        <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Category Performance</h3>
+                        <div class="w-full h-64 relative">
+                            <canvas id="unitCategoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Competency Search / Skill Finder -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden mb-8 print-break">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-6 flex flex-col md:flex-row md:items-center justify-between border-b dark:border-slate-800 gap-4">
+                        <h3 class="text-white font-black tracking-wide text-lg flex items-center gap-3">
+                            <span class="text-2xl">🔍</span> Competency Search
+                        </h3>
+                        <div class="w-full md:w-96 relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            </div>
+                            <input type="text" id="competencySearchInput" list="competenciesList" oninput="renderCompetencyFinder()" placeholder="Search a competency (e.g. ERCP)..." class="w-full pl-9 p-3 bg-white/10 text-white placeholder-slate-400 border border-white/20 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                            <datalist id="competenciesList"></datalist>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30 transition-all max-h-[400px] overflow-y-auto custom-scroll">
+                        <div id="competencyFinderResults" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            <div class="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-bold">
+                                Search for a competency above to instantly see all competent staff.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Achievements Board with Minimize/Maximize -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden mb-8 print-break">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
+                        <h3 class="text-white font-black tracking-wide text-lg flex items-center gap-3">
+                            <span class="text-2xl">🌟</span> Recent Achievements
+                        </h3>
+                        <div class="flex items-center gap-3">
+                            <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Last 30 Days</span>
+                            <button onclick="toggleAchievements()" id="achievementsToggleBtn" class="hidden p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10" title="Expand/Collapse">
+                                <!-- Down arrow (Expand) -->
+                                <svg id="iconExpand" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                                <!-- Up arrow (Collapse) -->
+                                <svg id="iconCollapse" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30 transition-all">
+                        <div id="recentAchievementsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                        <div id="noAchievementsMsg" class="hidden text-center py-10 text-slate-500 dark:text-slate-400 text-sm font-bold">
+                            No recent achievements in the last 30 days.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Unit Staff Breakdown Table -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-xl overflow-hidden">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-6 flex justify-between items-center border-b dark:border-slate-800">
+                        <h3 class="text-white font-black tracking-wide text-lg">Staff Priority List</h3>
+                        <span class="px-3 py-1 bg-white/10 text-white text-[10px] uppercase font-bold rounded-lg border border-white/10">Action Required</span>
+                    </div>
+                    <div class="overflow-x-auto max-h-[500px] custom-scroll">
+                        <table class="w-full text-left border-collapse" id="staffTable">
+                            <thead class="sticky top-0 bg-slate-50 dark:bg-slate-800 shadow-sm z-10">
+                                <tr class="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-black tracking-widest">
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700">Staff Member</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700">Team Leader</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Appraisal</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Compliance</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Expiring Soon</th>
+                                    <th class="p-4 border-b border-slate-200 dark:border-slate-700 text-center">Action Needed</th>
+                                </tr>
+                            </thead>
+                            <tbody id="unitStaffTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STAFF DASHBOARD (Visible when a specific staff is selected) -->
+            <div id="staffDashboard" class="hidden">
+                
+                <!-- Staff Profile & Main KPI -->
+                <div class="bg-white dark:bg-slate-800 rounded-[2rem] shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden mb-8 no-print">
+                    <div class="bg-slate-900 dark:bg-slate-950 p-8 text-white relative">
+                        <div class="absolute top-0 right-0 p-8 opacity-10">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-48 w-48 -mt-16 -mr-16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                        </div>
+                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+                            <div>
+                                <h2 id="displayName" class="text-4xl font-black tracking-tight mb-2">Name</h2>
+                                <span id="displayBand" class="inline-block bg-blue-500 text-white px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm">Grade</span>
+                            </div>
+                            <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 px-6 py-3 rounded-xl text-xs font-black no-print transition-all border border-white/10 shadow-sm backdrop-blur-sm flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                                PRINT REPORT
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Appraisal Banner -->
+                    <div id="appraisalBanner" class="bg-blue-50 dark:bg-slate-800 border-b border-blue-100 dark:border-slate-700 p-6 flex flex-col md:flex-row gap-6 items-start">
+                        <div class="flex-1">
+                            <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Appraisal Goal</h4>
+                            <div id="displayAppraisalGoal"></div>
+                        </div>
+                        <div class="md:w-64 flex flex-col gap-4">
+                            <div>
+                                <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Due Date</h4>
+                                <span id="displayAppraisalDate" class="font-bold text-slate-800 dark:text-slate-200 block"></span>
+                            </div>
+                            <div>
+                                <h4 class="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-1">Appraiser / Team Leader</h4>
+                                <span id="displayAppraiser" class="font-bold text-slate-800 dark:text-slate-200 block"></span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 bg-slate-50/50 dark:bg-slate-800/30">
+                        <!-- Overall Score Donut -->
+                        <div class="flex items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                            <div class="relative w-20 h-20 flex-shrink-0">
+                                <svg viewBox="0 0 36 36" class="w-full h-full">
+                                    <path class="text-slate-100 dark:text-slate-700" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                    <path id="staffOverallDonut" class="text-blue-600 dark:text-blue-500 donut-ring" stroke-dasharray="0, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center"><span id="staffOverallPercent" class="text-lg font-black text-slate-800 dark:text-white">0%</span></div>
+                            </div>
+                            <div>
+                                <span class="block text-[10px] uppercase font-black text-slate-400 tracking-widest mb-1">Overall Status</span>
+                                <span id="staffOverallText" class="text-sm font-bold text-slate-700 dark:text-slate-200 leading-tight block">Calculating...</span>
+                                <div id="staffBenchmark" class="text-[10px] font-bold text-slate-500 mt-1.5"></div>
+                            </div>
+                        </div>
+
+                        <!-- Valid KPI -->
+                        <div class="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 p-5 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-3 opacity-20 text-emerald-600 dark:text-emerald-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg></div>
+                            <span class="block text-[10px] uppercase font-black text-emerald-600/80 dark:text-emerald-400 tracking-widest mb-1 relative z-10">Valid & Up-to-date</span>
+                            <div class="relative z-10 flex items-baseline gap-1"><span id="staffCountValid" class="text-3xl font-black text-emerald-700 dark:text-emerald-300">0</span><span class="text-xs font-bold text-emerald-600 dark:text-emerald-500">skills</span></div>
+                        </div>
+
+                        <!-- Expiring KPI -->
+                        <div class="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 p-5 rounded-2xl flex flex-col justify-center relative overflow-hidden">
+                            <div class="absolute top-0 right-0 p-3 opacity-20 text-amber-500 dark:text-amber-400"><svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11
