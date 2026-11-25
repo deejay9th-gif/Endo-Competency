@@ -253,18 +253,18 @@
 
                 <!-- Analytics Row: Risk & Categories -->
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    <!-- Staff Risk Breakdown -->
+                    <!-- Staff Risk Breakdown / Dynamic Competency Coverage -->
                     <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-8 print-break">
-                        <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1">Staff Risk Profile</h3>
-                        <p class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-6">Staff grouped by completion %</p>
+                        <h3 id="riskChartTitle" class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-1">Staff Risk Profile</h3>
+                        <p id="riskChartSubtitle" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-6">Staff grouped by completion %</p>
                         <div class="w-full h-64 relative">
                             <canvas id="staffRiskChart"></canvas>
                         </div>
                     </div>
                     
-                    <!-- Category Performance -->
+                    <!-- Category Performance / Dynamic Matched Competencies -->
                     <div class="bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-sm p-8 print-break lg:col-span-2">
-                        <h3 class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Category Performance</h3>
+                        <h3 id="catChartTitle" class="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-6">Unit Category Performance</h3>
                         <div class="w-full h-64 relative">
                             <canvas id="unitCategoryChart"></canvas>
                         </div>
@@ -277,18 +277,19 @@
                         <h3 class="text-white font-black tracking-wide text-lg flex items-center gap-3">
                             <span class="text-2xl">🔍</span> Competency Search
                         </h3>
-                        <div class="w-full md:w-96 relative">
+                        <div class="w-full md:w-96 relative flex items-center">
                             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                 <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                             </div>
-                            <input type="text" id="competencySearchInput" list="competenciesList" oninput="renderCompetencyFinder()" placeholder="Search a competency (e.g. ERCP)..." class="w-full pl-9 p-3 bg-white/10 text-white placeholder-slate-400 border border-white/20 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                            <input type="text" id="competencySearchInput" list="competenciesList" oninput="renderCompetencyFinder()" placeholder="Search a competency (e.g. ERCP)..." class="w-full pl-9 pr-9 p-3 bg-white/10 text-white placeholder-slate-400 border border-white/20 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all" />
+                            <button id="clearCompSearchBtn" onclick="clearCompetencySearch()" class="hidden absolute right-2.5 text-slate-400 hover:text-white text-xs font-black px-1.5 py-0.5 rounded-md bg-white/10 transition-colors" title="Clear search">✕</button>
                             <datalist id="competenciesList"></datalist>
                         </div>
                     </div>
                     <div class="p-6 bg-slate-50/50 dark:bg-slate-800/30 transition-all max-h-[400px] overflow-y-auto custom-scroll">
                         <div id="competencyFinderResults" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                             <div class="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-bold">
-                                Search for a competency above to instantly see all competent staff.
+                                Search for a competency above to instantly see all competent staff and update the charts.
                             </div>
                         </div>
                     </div>
@@ -666,15 +667,44 @@
         let auth, db;
         const ADMIN_PASSCODE = "Iamn9thawk"; 
         
-        window.state = { user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null, accessLevel: null, currentUser: null, trends: [], focusMode: false, achievementsExpanded: false };
+        window.state = {
+            user: null, categories: [], skills: [], staffStore: {}, unsubscribe: null,
+            accessLevel: null, currentUser: null, trends: [], focusMode: false,
+            achievementsExpanded: false, unitChartCache: null
+        };
+
+        function restoreDefaultUnitCharts() {
+            updateText('riskChartTitle', 'Staff Risk Profile');
+            updateText('riskChartSubtitle', 'Staff grouped by completion %');
+            updateText('catChartTitle', 'Unit Category Performance');
+            if (window.state.unitChartCache) {
+                const c = window.state.unitChartCache;
+                drawRiskChart(c.compliant, c.attention, c.nonCompliant);
+                drawUnitCategoryChart(c.unitCatData);
+            }
+        }
+
+        window.clearCompetencySearch = function() {
+            const input = document.getElementById('competencySearchInput');
+            if (input) input.value = '';
+            renderCompetencyFinder();
+        };
 
         window.renderCompetencyFinder = function() {
-            const inputVal = document.getElementById('competencySearchInput').value.toLowerCase().trim();
+            const inputEl = document.getElementById('competencySearchInput');
+            const clearBtn = document.getElementById('clearCompSearchBtn');
+            const inputVal = inputEl ? inputEl.value.toLowerCase().trim() : '';
             const resultsGrid = document.getElementById('competencyFinderResults');
             if (!resultsGrid) return;
+
+            if (clearBtn) {
+                if (inputVal) clearBtn.classList.remove('hidden');
+                else clearBtn.classList.add('hidden');
+            }
             
             if (!inputVal) {
-                resultsGrid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-bold">Search for a competency above to instantly see all competent staff.</div>`;
+                resultsGrid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-bold">Search for a competency above to instantly see all competent staff and update the charts.</div>`;
+                restoreDefaultUnitCharts();
                 return;
             }
 
@@ -684,18 +714,24 @@
 
             if (matchedSkills.length === 0) {
                 resultsGrid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-500 dark:text-slate-400 text-sm font-bold">No competencies found matching "${inputVal}".</div>`;
+                restoreDefaultUnitCharts();
                 return;
             }
 
             const today = new Date();
+            const totalStaffCount = Object.keys(window.state.staffStore).length;
             let htmlOutput = '';
             const uniqueMatched = [...new Set(matchedSkills.map(m => m.skill))];
+            const skillStatsForCharts = [];
 
             uniqueMatched.forEach(skillName => {
                 const skillObj = window.state.skills.find(s => s.skill === skillName);
                 const cat = skillObj ? skillObj.cat : "General";
                 
                 const competentStaff = [];
+                let validCount = 0;
+                let expiredCount = 0;
+
                 Object.values(window.state.staffStore).forEach(profile => {
                     const compData = profile.competencies[skillName];
                     if (compData && compData.status === "Yes") {
@@ -703,24 +739,43 @@
                         if (compData.date) {
                             const expiry = getExpiryDate(compData.date, cat);
                             if (expiry < today) {
+                                expiredCount++;
                                 pill = `<span class="px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[9px] font-black tracking-wider uppercase border border-red-200 dark:border-red-800">Expired</span>`;
                             } else {
+                                validCount++;
                                 const dateStr = expiry.toLocaleDateString('en-GB');
                                 pill = `<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid: ${dateStr}</span>`;
                             }
                         } else {
+                            validCount++;
                             pill = `<span class="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[9px] font-black tracking-wider uppercase border border-emerald-200 dark:border-emerald-800">Valid</span>`;
                         }
                         competentStaff.push({ name: profile.name, band: profile.band, pill: pill });
                     }
                 });
 
+                const notSignedOffCount = Math.max(0, totalStaffCount - (validCount + expiredCount));
+                const validPct = totalStaffCount > 0 ? Math.round((validCount / totalStaffCount) * 100) : 0;
+                const badgeColor = validPct > 80 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : (validPct >= 40 ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300');
+
+                skillStatsForCharts.push({
+                    skill: skillName,
+                    valid: validCount,
+                    expired: expiredCount,
+                    missing: notSignedOffCount,
+                    total: totalStaffCount,
+                    pct: validPct
+                });
+
                 competentStaff.sort((a, b) => a.name.localeCompare(b.name));
 
                 htmlOutput += `
-                    <div class="col-span-full border-b border-slate-200 dark:border-slate-700 pb-2 mb-2 mt-4 first:mt-0">
-                        <h4 class="text-sm font-black text-slate-800 dark:text-slate-200">${skillName}</h4>
-                        <p class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">${competentStaff.length} Staff Signed Off</p>
+                    <div class="col-span-full border-b border-slate-200 dark:border-slate-700 pb-2 mb-2 mt-4 first:mt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <h4 class="text-sm font-black text-slate-800 dark:text-slate-200">${skillName}</h4>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-widest">${validCount} Valid / ${competentStaff.length} Total Signed Off (out of ${totalStaffCount} Staff)</p>
+                        </div>
+                        <span class="self-start sm:self-auto px-3 py-1 rounded-full text-xs font-black ${badgeColor}">${validPct}% Competent</span>
                     </div>
                 `;
 
@@ -742,6 +797,22 @@
             });
 
             resultsGrid.innerHTML = htmlOutput;
+
+            // Dynamically update Doughnut Chart (Primary Matched Skill)
+            const primary = skillStatsForCharts[0];
+            if (primary) {
+                updateText('riskChartTitle', 'Competency Coverage');
+                updateText('riskChartSubtitle', `${primary.skill} — ${primary.pct}% Valid (${primary.valid}/${primary.total} Staff)`);
+                drawCompetencyDoughnutChart(primary.valid, primary.expired, primary.missing, primary.total);
+            }
+
+            // Dynamically update Horizontal Bar Chart (All Matched Skills)
+            updateText('catChartTitle', 'Matched Competency Breakdown (% Signed Off)');
+            const dynamicBarData = {};
+            skillStatsForCharts.forEach(st => {
+                dynamicBarData[st.skill] = { valid: st.valid, total: st.total };
+            });
+            drawUnitCategoryChart(dynamicBarData);
         };
 
         window.toggleAchievements = function() {
@@ -786,7 +857,6 @@
             updateDisplay();
         };
 
-        // FIXED showSetupScreen Bug
         function showSetupScreen() {
             const loginOverlay = document.getElementById('loginOverlay');
             if (loginOverlay) loginOverlay.classList.add('hidden');
@@ -971,7 +1041,6 @@
                 } else {
                     document.getElementById('loader')?.classList.add('hidden');
                     
-                    // FIXED: explicitly update dropdown so you know it's not "stuck" loading
                     const sel = document.getElementById('loginNameSelect');
                     if(sel) sel.innerHTML = '<option value="">-- No Staff Data Found --</option>';
                     
@@ -1131,7 +1200,6 @@
             }
 
             if (isRowBased) {
-                // ROW BASED PARSING
                 const headerRow = rows[headerRowIndex];
                 const competencyCols = [];
                 
@@ -1194,7 +1262,6 @@
                     });
                 }
             } else {
-                // COLUMN BASED PARSING
                 let headerIndex = -1;
                 for (let i = 0; i < Math.min(rows.length, 25); i++) {
                     if (rows[i].slice(1).filter(c => c && c.trim() !== "").length >= 2) { 
@@ -1369,7 +1436,6 @@
                 });
             }
 
-            // Populate Competency Search Datalist
             const compList = document.getElementById('competenciesList');
             if (compList) {
                 compList.innerHTML = '';
@@ -1393,7 +1459,6 @@
 
             const term = searchInput ? searchInput.value.toLowerCase() : '';
 
-            // Filter Top Dropdown
             if (staffSelect) {
                 const options = staffSelect.querySelectorAll('option, optgroup');
                 options.forEach(opt => {
@@ -1401,26 +1466,21 @@
                         let has = false;
                         opt.querySelectorAll('option').forEach(c => {
                             const nameMatch = c.textContent.toLowerCase().includes(term);
-                            const v = nameMatch;
-                            
-                            c.style.display = v ? '' : 'none'; 
-                            if (v) has = true;
+                            c.style.display = nameMatch ? '' : 'none'; 
+                            if (nameMatch) has = true;
                         });
                         opt.style.display = has ? '' : 'none';
                     } else if (opt.value === "") { opt.style.display = ''; }
                 });
             }
 
-            // Filter Table (if unit dashboard is visible)
             const tbody = document.getElementById('unitStaffTableBody');
             if (tbody) {
                 const rows = tbody.querySelectorAll('tr');
                 rows.forEach(tr => {
                     const nameCell = tr.querySelector('td:nth-child(1)');
                     const nameMatch = nameCell && nameCell.textContent.toLowerCase().includes(term);
-                    
-                    if (nameMatch) tr.style.display = '';
-                    else tr.style.display = 'none';
+                    tr.style.display = nameMatch ? '' : 'none';
                 });
             }
         };
@@ -1456,7 +1516,6 @@
             updateText('displayName', profile.name);
             updateText('displayBand', profile.band);
 
-            // Populate Appraisal Banner
             const appraiser = profile.competencies['Appraiser/ Team Leader']?.rawText || profile.competencies['Appraiser']?.rawText || "Unassigned";
             let appDueDateStr = "No Date Set";
             const appDue = profile.competencies['Appraisal Due Date'];
@@ -1476,7 +1535,6 @@
             updateText('displayAppraisalDate', appDueDateStr);
             updateText('displayAppraiser', appraiser);
 
-            // Remove hidden class from banner
             document.getElementById('appraisalBanner').classList.remove('hidden');
             
             let countValid = 0, countExpiring = 0, countAction = 0, totalApplicable = 0;
@@ -1731,7 +1789,6 @@
                 totalStaff++;
                 let sTotal = 0, sValid = 0, sExpiring = 0, sAction = 0;
 
-                // Handle Appraisal Logic
                 const appDue = profile.competencies['Appraisal Due Date'];
                 let appStatusStr = `<span class="text-emerald-500 font-bold">Valid</span>`;
                 if (appDue && appDue.date) {
@@ -1773,7 +1830,6 @@
                         }
                     }
 
-                    // Handle Recent Achievements
                     if (!isMeta && compData.status === "Yes" && compData.date && compData.date >= thirtyDaysAgo && compData.date <= today) {
                         recentAchievements.push({ name: profile.name, band: profile.band, skill: item.skill, date: compData.date });
                     }
@@ -1801,10 +1857,24 @@
             const unitPct = unitTotalSkills > 0 ? Math.round((unitValidSkills/unitTotalSkills)*100) : 0;
             animateValue('unitOverallPercent', unitPct, 1200, '%');
             document.getElementById('unitOverallDonut').setAttribute('stroke-dasharray', `${unitPct}, 100`);
+
+            // Cache unit chart data for instant restoration when competency search is cleared
+            window.state.unitChartCache = {
+                compliant: staffCompliant,
+                attention: staffAttention,
+                nonCompliant: staffNonCompliant,
+                unitCatData: unitCatData
+            };
             
             drawUnitTrendChart();
-            drawRiskChart(staffCompliant, staffAttention, staffNonCompliant);
-            drawUnitCategoryChart(unitCatData);
+
+            // Respect active competency search if present, otherwise draw default unit charts
+            const activeCompSearch = document.getElementById('competencySearchInput')?.value.trim();
+            if (activeCompSearch) {
+                renderCompetencyFinder();
+            } else {
+                restoreDefaultUnitCharts();
+            }
 
             // Render Achievements
             recentAchievements.sort((a, b) => b.date - a.date);
@@ -1983,6 +2053,51 @@
             });
         }
 
+        function drawCompetencyDoughnutChart(valid, expired, missing, total) {
+            const ctx = document.getElementById('staffRiskChart');
+            if(!ctx) return;
+            if(window.riskChart) window.riskChart.destroy();
+            
+            const isDark = document.documentElement.classList.contains('dark');
+            const textColor = isDark ? '#94a3b8' : '#64748b';
+
+            const validPct = total > 0 ? Math.round((valid / total) * 100) : 0;
+            const expiredPct = total > 0 ? Math.round((expired / total) * 100) : 0;
+            const missingPct = total > 0 ? Math.round((missing / total) * 100) : 0;
+
+            window.riskChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [
+                        `Valid / Signed Off (${validPct}%): ${valid}`,
+                        `Expired (${expiredPct}%): ${expired}`,
+                        `Not Signed Off (${missingPct}%): ${missing}`
+                    ],
+                    datasets: [{
+                        data: [valid, expired, missing],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: textColor, padding: 12, font: { size: 11, weight: 'bold' } } },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const pct = total > 0 ? Math.round((context.parsed / total) * 100) : 0;
+                                    return ` ${context.parsed} Staff (${pct}%)`;
+                                }
+                            }
+                        }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
         window.unitCatChart = null;
         function drawUnitCategoryChart(catData) {
             const ctx = document.getElementById('unitCategoryChart');
@@ -2021,7 +2136,7 @@
                     responsive: true, maintainAspectRatio: false,
                     plugins: { 
                         legend: { display: false },
-                        tooltip: { callbacks: { label: (ctx) => ctx.parsed.x + '% Compliant' } }
+                        tooltip: { callbacks: { label: (ctx) => ctx.parsed.x + '% Signed Off' } }
                     },
                     scales: {
                         x: { beginAtZero: true, max: 100, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + '%' } },
